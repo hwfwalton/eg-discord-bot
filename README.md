@@ -8,6 +8,30 @@ A small helper bot for our community Discord server, written in TypeScript with 
 - Features are **slash commands** (`/ping`, …) registered per server on startup, so changes appear right away.
 - Node 24 runs the `.ts` files directly, so there's no build step. `tsc` only type-checks.
 
+## Features
+
+### Game night reminder
+
+Every Saturday at 10:30am Pacific (`GAME_NIGHT_SCHEDULE` / `GAME_NIGHT_TIMEZONE`), the bot reads the posts in
+#announcements made since the previous session and posts `@everyone Game night is starting! This week we're playing **<game>**`
+in the game-night channel.
+
+- **The game is the first bolded text** in the announcement: `**Hades II**`.
+- **No session:** phrases like "no game", "no session", "cancelled", "skipping this week" or "week off" mean
+  the bot posts nothing. A cancellation wins over a bolded name.
+- The newest post that names a game or cancels wins. Unrelated posts (other news) don't override it.
+- If no post names a game or cancels, the bot **doesn't** post. A wrong @everyone ping is worse than a missed one.
+- **Confirmation DM:** when you post or edit an announcement, the bot DMs you what it understood.
+  `/gamenight` shows the same thing at any time (only you see the reply).
+- If the bot was offline at start time, it still posts if it comes back within 30 minutes. It never posts twice.
+
+### Game suggestions
+
+When someone creates a post in the suggestions forum, the bot looks up the post's title on Steam and replies
+with the store link, price, release date, multiplayer modes and a short description. If the name isn't an exact
+match, it says it's a best guess and lists other matches. Try it without Discord:
+`npm run lookup -- "deep rock"`.
+
 ## Local development
 
 Requires Node 24+.
@@ -25,6 +49,14 @@ npm run invite           # prints the link for adding the bot to each server in 
 | `DISCORD_TOKEN`      | Bot token                                                |
 | `DISCORD_TOKEN_FILE` | Path to a file containing the token (used if the above is unset) |
 | `GUILD_IDS`          | Comma-separated server IDs this instance serves          |
+| `GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID`, `GAME_NIGHT_CHANNEL_ID` | Enable the game night reminder |
+| `GAME_NIGHT_SCHEDULE`, `GAME_NIGHT_TIMEZONE` | When sessions start (default `30 10 * * 6`, `America/Los_Angeles`) |
+| `GAME_SUGGESTIONS_CHANNEL_ID` | Enable game info replies in this forum channel |
+
+To get a channel's ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click the channel → **Copy Channel ID**.
+
+The game night feature needs the **Message Content** intent, which is switched on in the
+[Developer Portal](https://discord.com/developers/applications) → Bot → Privileged Gateway Intents.
 
 Servers:
 

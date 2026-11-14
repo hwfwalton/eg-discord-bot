@@ -13,6 +13,11 @@ explain Discord-specific concepts (intents, permissions, interactions) when they
   - Use `import type` for type-only imports (`verbatimModuleSyntax`).
 - discord.js v14, slash commands only. Each command is a `Command` in `src/commands/`, listed in
   `src/commands/index.ts`. Commands are registered per server on `ClientReady` (instant updates).
+- Features live in `src/features/<name>/`: pure logic (parsing, decisions, message text) in separate
+  files with tests, and one `register…(client, config)` file holding the Discord event wiring. Features are
+  optional and turn on when their env vars are set (`src/config.ts`).
+- Game night (`src/features/gameNight/`) is stateless: everything is re-derived from the #announcements
+  history and the cron schedule (no database). Prefer not posting over a wrong @everyone ping.
 - Keep gateway intents and invite permissions minimal. Add intents in `src/bot.ts` and permissions in
   `src/scripts/invite-url.ts` only when a feature needs them, and avoid privileged intents (Message Content).
 - Vitest for tests, colocated as `*.test.ts`. Run `npm run check` before calling work done.

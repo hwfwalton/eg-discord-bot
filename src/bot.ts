@@ -7,22 +7,34 @@ import {
   RESTJSONErrorCodes,
   type Interaction,
 } from 'discord.js';
-import { commandMap, commands } from './commands/index.ts';
+import { buildCommands, commandMap } from './commands/index.ts';
+import type { Command } from './commands/types.ts';
 import type { Config } from './config.ts';
+import { registerGameNight } from './features/gameNight/gameNight.ts';
+import { registerGameSuggestions } from './features/gameSuggestions/gameSuggestions.ts';
 import { log } from './log.ts';
 
 export function createBot(config: Config): Client {
-  const client = new Client({
-    // Only the "Guilds" intent for now: enough for slash commands and threads.
-    // Add intents as features need them (e.g. GuildScheduledEvents for event reminders).
-    intents: [GatewayIntentBits.Guilds],
-  });
+  const intents = [GatewayIntentBits.Guilds];
+  if (config.gameNight) {
+    // To read announcement posts as they're made. Message Content is a "privileged" intent:
+    // it must also be switched on for the bot in the Discord Developer Portal.
+    intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+  }
+  const client = new Client({ intents });
 
+  const gameNight = config.gameNight ? registerGameNight(client, config.gameNight) : undefined;
+  if (config.gameSuggestions) registerGameSuggestions(client, config.gameSuggestions);
+  log.info(
+    `Features: game night ${gameNight ? 'on' : 'off'}, game suggestions ${config.gameSuggestions ? 'on' : 'off'}`,
+  );
+
+  const commands = buildCommands({ gameNight });
   const byName = commandMap(commands);
 
   client.once(Events.ClientReady, async (ready) => {
     log.info(`Logged in as ${ready.user.tag}`);
-    await registerCommands(ready, config.guildIds);
+    await registerCommands(ready, config.guildIds, commands);
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
@@ -40,7 +52,7 @@ export function createBot(config: Config): Client {
  * update instantly (global ones can take a while), and `set` replaces the whole
  * list, so removed commands disappear too.
  */
-async function registerCommands(client: Client<true>, guildIds: string[]): Promise<void> {
+async function registerCommands(client: Client<true>, guildIds: string[], commands: Command[]): Promise<void> {
   const body = commands.map((c) => c.data.toJSON());
   for (const guildId of guildIds) {
     try {
@@ -60,7 +72,7 @@ async function registerCommands(client: Client<true>, guildIds: string[]): Promi
 async function handleInteraction(
   interaction: Interaction,
   config: Config,
-  byName: ReturnType<typeof commandMap>,
+  byName: Map<string, Command>,
 ): Promise<void> {
   if (!interaction.isChatInputCommand()) return;
 

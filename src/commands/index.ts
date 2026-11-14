@@ -1,10 +1,19 @@
+import type { GameNight } from '../features/gameNight/gameNight.ts';
+import { gameNightCommand } from './gamenight.ts';
 import { ping } from './ping.ts';
 import type { Command } from './types.ts';
 
-/** Every slash command the bot offers. Add new commands here. */
-export const commands: Command[] = [ping];
+/** Features that commands can talk to. Absent when that feature isn't configured. */
+export interface CommandDeps {
+  gameNight?: GameNight;
+}
 
-export function commandMap(list: Command[] = commands): Map<string, Command> {
+/** Every slash command the bot offers. Add new commands here. */
+export function buildCommands(deps: CommandDeps = {}): Command[] {
+  return [ping, ...(deps.gameNight ? [gameNightCommand(deps.gameNight)] : [])];
+}
+
+export function commandMap(list: Command[]): Map<string, Command> {
   const map = new Map<string, Command>();
   for (const command of list) {
     if (map.has(command.data.name)) {

@@ -7,6 +7,7 @@ import { applicationIdFromToken, loadConfig } from '../config.ts';
 const permissions = new PermissionsBitField([
   PermissionFlagsBits.ViewChannel,
   PermissionFlagsBits.SendMessages,
+  PermissionFlagsBits.MentionEveryone, // game night's @everyone start post
   PermissionFlagsBits.EmbedLinks,
   PermissionFlagsBits.ReadMessageHistory,
   PermissionFlagsBits.CreatePublicThreads,

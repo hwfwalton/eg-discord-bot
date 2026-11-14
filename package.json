@@ -13,9 +13,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm test",
-    "invite": "node --env-file-if-exists=.env src/scripts/invite-url.ts"
+    "invite": "node --env-file-if-exists=.env src/scripts/invite-url.ts",
+    "lookup": "node src/scripts/lookup-game.ts"
   },
   "dependencies": {
+    "croner": "^11.0.1",
     "discord.js": "^14.28.1"
   },
   "devDependencies": {
