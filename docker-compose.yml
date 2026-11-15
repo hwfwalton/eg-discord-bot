@@ -2,6 +2,7 @@
 # Put a `.env` file next to this one containing:
 #   DISCORD_TOKEN=<the bot token>
 #   ITAD_API_KEY=<IsThereAnyDeal API key>   (optional: game replies skip deal info without it)
+#   GEMINI_API_KEY=<Gemini API key>          (optional: reads announcements that don't follow the template)
 services:
   bot:
     build: .
@@ -17,6 +18,7 @@ services:
       GAME_NIGHT_CHANNEL_ID: "567890123456789012" # #gaming: where the @everyone start post goes
       GAME_NIGHT_SCHEDULE: "30 10 * * 6"
       GAME_NIGHT_TIMEZONE: America/Los_Angeles
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Game info replies in the suggestions forum
       GAME_SUGGESTIONS_CHANNEL_ID: "678901234567890123" # #🤩-new-game-ideas
       ITAD_API_KEY: ${ITAD_API_KEY:-}

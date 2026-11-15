@@ -13,16 +13,28 @@ A small helper bot for our community Discord server, written in TypeScript with 
 ### Game night reminder
 
 Every Saturday at 10:30am Pacific (`GAME_NIGHT_SCHEDULE` / `GAME_NIGHT_TIMEZONE`), the bot reads the posts in
-#announcements made since the previous session and posts `@everyone Game night is starting! This week we're playing **<game>**`
-in the game-night channel.
+#announcements made since the previous session and posts
+`@everyone 🎮 **EG289** is starting now! We're playing **<game>**.` (plus the Steam link) in the game-night channel.
 
-- **The game is the first bolded text** in the announcement: `**Hades II**`.
-- **No session:** phrases like "no game", "no session", "cancelled", "skipping this week" or "week off" mean
-  the bot posts nothing. A cancellation wins over a bolded name.
-- The newest post that names a game or cancels wins. Unrelated posts (other news) don't override it.
-- If no post names a game or cancels, the bot **doesn't** post. A wrong @everyone ping is worse than a missed one.
-- **Confirmation DM:** when you post or edit an announcement, the bot DMs you what it understood.
-  `/gamenight` shows the same thing at any time (only you see the reply).
+- **The weekly template:** `For EG289 (…) we'll be playing...` followed by the game in bold, `**Sky Noon**!`.
+  The EG number and the post's Steam link are picked up too.
+- **No session:** posts without the template that say "no official EG", "cancel", "no game", "skipping this
+  week", "week off", etc. mean the bot posts nothing.
+- **Anything else** (reworded announcements, "rain check this week, sick kiddo") is read by Gemini, if
+  `GEMINI_API_KEY` is set (free tier from [AI Studio](https://aistudio.google.com)). Gemini only gets posts the
+  template can't read, and its answer must match the post: the game, EG number and Steam link must all appear in it.
+- The newest post that names a game or cancels wins. Unrelated posts (surveys, recaps, other news) are skipped.
+- Posts only Gemini could read are handled cautiously, because **a wrong @everyone ping is worse than a missed one**:
+  - Gemini may cancel a session the announcement scheduled.
+  - A post that confirms the announcement's game (e.g. a Saturday reminder) defers to the announcement.
+  - A post that names a *different* game, or a game for a week that was cancelled, means **no post**: the DM
+    explains, and you can fix it by posting or editing an announcement in the template.
+  - If Gemini can't read a post, nothing older is trusted over it, so **no post** either. At game time the bot
+    retries for a few minutes first, then DMs the post's author that it held off.
+- If no post names a game or cancels, the bot **doesn't** post.
+- **Confirmation DM:** when you post or edit an announcement, the bot DMs you what it understood, quoting
+  the exact start post (and saying when Gemini read it). `/gamenight` shows the same thing at any time (only
+  you see the reply).
 - If the bot was offline at start time, it still posts if it comes back within 30 minutes. It never posts twice.
 
 ### Game suggestions
@@ -68,6 +80,8 @@ npm run invite           # prints the link for adding the bot to each server in 
 | `GUILD_IDS`          | Comma-separated server IDs this instance serves          |
 | `GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID`, `GAME_NIGHT_CHANNEL_ID` | Enable the game night reminder |
 | `GAME_NIGHT_SCHEDULE`, `GAME_NIGHT_TIMEZONE` | When sessions start (default `30 10 * * 6`, `America/Los_Angeles`) |
+| `GEMINI_API_KEY` / `GEMINI_API_KEY_FILE` | Gemini API key (free tier) for announcements that don't follow the template (optional) |
+| `GEMINI_MODEL` | Gemini model to use (default `gemini-3.5-flash-lite`) |
 | `GAME_SUGGESTIONS_CHANNEL_ID` | Enable game info replies in this forum channel |
 | `ITAD_API_KEY` / `ITAD_API_KEY_FILE` | IsThereAnyDeal API key for deal info (optional). The OAuth client ID/secret aren't needed. |
 
@@ -98,8 +112,8 @@ The NAS is x86-64 (`linux/amd64`). The simplest setup is to build the image on t
 
 1. Copy this project to a folder on the NAS, e.g. `/volume1/docker/eg-discord-bot`. `node_modules`, `.env`
    and `.git` aren't needed there.
-2. In that folder, create a `.env` file containing `DISCORD_TOKEN=<the bot token>` and
-   `ITAD_API_KEY=<IsThereAnyDeal API key>`.
+2. In that folder, create a `.env` file containing `DISCORD_TOKEN=<the bot token>`,
+   `ITAD_API_KEY=<IsThereAnyDeal API key>` and `GEMINI_API_KEY=<Gemini API key>`.
 3. Either:
    - **UGOS:** Docker → Project → Create, point it at that folder (it picks up `docker-compose.yml`), and deploy; or
    - **SSH:** `cd /volume1/docker/eg-discord-bot && docker compose up -d --build`

@@ -110,10 +110,12 @@ describe('starterMessage', () => {
 });
 
 describe('resultText', () => {
-  it('links the post', () => {
-    expect(resultText({ kind: 'created', post: { id: '7' } })).toContain('<#7>');
-    expect(resultText({ kind: 'exists', post: { id: '7' } })).toContain('<#7> has already been suggested');
-    expect(resultText({ kind: 'maybeExists', post: { id: '7' } })).toContain('Did you mean <#7>?');
+  const post = { id: '7', name: 'Spellsworn', url: 'https://discord.com/channels/1/7' };
+
+  it('links the post: a mention for a new post, a named link for an existing (possibly archived) one', () => {
+    expect(resultText({ kind: 'created', post })).toContain('<#7>');
+    expect(resultText({ kind: 'exists', post })).toContain('[Spellsworn](https://discord.com/channels/1/7) has already been suggested');
+    expect(resultText({ kind: 'maybeExists', post })).toContain('Did you mean [Spellsworn](https://discord.com/channels/1/7)?');
     expect(resultText({ kind: 'invalid', reason: 'nope' })).toBe('nope');
   });
 
@@ -153,7 +155,7 @@ describe('autocompleteChoices', () => {
 
 describe('createSuggester', () => {
   type Created = { name: string; message: { content: string; embeds: unknown[] } };
-  type Post = { id: string; name: string; archivedAt: Date | null };
+  type Post = { id: string; name: string; url: string; archivedAt: Date | null };
 
   /**
    * A forum whose archived posts are listed newest-archived first, `pageSize` at a time, honouring
@@ -162,7 +164,7 @@ describe('createSuggester', () => {
   function fakeForum({ active = [] as string[], archived = [] as string[], pageSize = 2, guildId = 'G' } = {}) {
     const created: Created[] = [];
     const archivedCalls: { before?: Date }[] = [];
-    const post = (name: string, archivedAt: Date | null): Post => ({ id: `post:${name}`, name, archivedAt });
+    const post = (name: string, archivedAt: Date | null): Post => ({ id: `post:${name}`, name, url: `https://discord.com/channels/G/post:${name}`, archivedAt });
     const archivedPosts = archived.map((name, i) => post(name, new Date(Date.UTC(2026, 0, 28 - i))));
     const forum = {
       guildId,
@@ -176,7 +178,7 @@ describe('createSuggester', () => {
         },
         create: async (options: Created) => {
           created.push(options);
-          return { id: 'new-post' };
+          return { id: 'new-post', name: options.name, url: 'https://discord.com/channels/G/new-post' };
         },
       },
     };
@@ -211,7 +213,7 @@ describe('createSuggester', () => {
 
     const result = await suggester.suggest({ ...request, game: 'hades 2', note: 'Sequel!' });
 
-    expect(result).toEqual({ kind: 'created', post: { id: 'new-post' } });
+    expect(result).toEqual({ kind: 'created', post: expect.objectContaining({ id: 'new-post' }) });
     expect(created).toHaveLength(1);
     expect(created[0]?.name).toBe('Hades II');
     expect(created[0]?.message.content).toBe('💡 Suggested by <@U1>\n> Sequel!');

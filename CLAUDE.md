@@ -18,6 +18,14 @@ explain Discord-specific concepts (intents, permissions, interactions) when they
   optional and turn on when their env vars are set (`src/config.ts`).
 - Game night (`src/features/gameNight/`) is stateless: everything is re-derived from the #announcements
   history and the cron schedule (no database). Prefer not posting over a wrong @everyone ping.
+- Announcements are read by the template parser (`announcement.ts`) first. Only posts it can't classify go
+  to Gemini (`geminiReader.ts`, free-tier Gemini API over plain `fetch`, key in the `x-goog-api-key`
+  header). Gemini output is untrusted: the game, EG label and Steam link must all come from the post's
+  text. A Gemini failure or ungrounded answer is `unreadable`, never `unclear`: `decidePlan` must not let an
+  older post decide over a post it couldn't read. Gemini may cancel, but a Gemini game that contradicts the
+  week's template decision gives an `unsure` plan (no ping). Readings are cached in memory, so the bot
+  pre-reads the window on startup and retries for a few minutes at game time (`planWithRetries`). The
+  local key lives at `~/.config/eg-discord-bot/gemini-api-key`.
 - Game suggestions (`src/features/gameSuggestions/`) use Steam's keyless store API plus IsThereAnyDeal's API
   (API key only, as the `key` query param; the OAuth client ID/secret aren't used). ITAD is skipped for
   free games and failures fall back to a Steam-only reply. The local key lives at

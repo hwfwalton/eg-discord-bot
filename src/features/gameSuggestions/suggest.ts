@@ -55,11 +55,18 @@ export interface SuggestOptions {
   requireExactMatch?: boolean;
 }
 
+/** The parts of a forum post (thread) the replies need. */
+export interface PostRef {
+  id: string;
+  name: string;
+  url: string;
+}
+
 export type SuggestResult =
-  | { kind: 'created'; post: { id: string } }
-  | { kind: 'exists'; post: { id: string } }
+  | { kind: 'created'; post: PostRef }
+  | { kind: 'exists'; post: PostRef }
   /** Steam's best guess for the name already has a post. */
-  | { kind: 'maybeExists'; post: { id: string } }
+  | { kind: 'maybeExists'; post: PostRef }
   /** requireExactMatch was set and Steam had no exact match, so nothing was created. */
   | { kind: 'unsure'; query: string; guess?: string; steamDown?: boolean }
   | { kind: 'invalid'; reason: string };
@@ -136,9 +143,9 @@ export function resultText(result: SuggestResult): string {
     case 'created':
       return `✅ Added <#${result.post.id}> to the game ideas. Thanks for the suggestion!`;
     case 'exists':
-      return `💡 <#${result.post.id}> has already been suggested. Add your thoughts there!`;
+      return `💡 ${postLink(result.post)} has already been suggested. Add your thoughts there!`;
     case 'maybeExists':
-      return `💡 Did you mean <#${result.post.id}>? It's already been suggested, so add your thoughts there! If you meant a different game, try its full name.`;
+      return `💡 Did you mean ${postLink(result.post)}? It's already been suggested, so add your thoughts there! If you meant a different game, try its full name.`;
     case 'unsure': {
       const typed = result.query.replace(/`/g, "'");
       const asIs = `To add it as written, use \`/suggest game: ${typed}\`.`;
@@ -249,6 +256,14 @@ async function listPosts(forum: ForumChannel): Promise<ThreadChannel[]> {
   }
   log.warn(`Checked only the newest ${MAX_ARCHIVE_PAGES * 100} archived posts for duplicates`);
   return posts;
+}
+
+/**
+ * A named link to an existing post. Not a <#id> mention: Discord shows those as "#unknown" for posts
+ * the reader's app hasn't loaded, which includes most archived forum posts.
+ */
+function postLink(post: PostRef): string {
+  return `[${post.name.replace(/[[\]]/g, '')}](${post.url})`;
 }
 
 function quote(text: string): string {

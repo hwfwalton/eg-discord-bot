@@ -46,6 +46,16 @@ describe('loadConfig', () => {
     ).toThrow(/GAME_NIGHT_CHANNEL_ID/);
   });
 
+  it('turns on the Gemini fallback for game night when a key is set', () => {
+    const base = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID: GUILD, GAME_NIGHT_CHANNEL_ID: GUILD };
+    expect(loadConfig(base, noFile).gameNight?.gemini).toBeUndefined();
+    expect(loadConfig({ ...base, GEMINI_API_KEY_FILE: '/g' }, () => 'gkey\n').gameNight?.gemini).toEqual({
+      apiKey: 'gkey',
+      model: 'gemini-3.5-flash-lite',
+    });
+    expect(loadConfig({ ...base, GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-x' }, noFile).gameNight?.gemini?.model).toBe('gemini-x');
+  });
+
   it('reads the optional ITAD key from ITAD_API_KEY_FILE', () => {
     const env = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_SUGGESTIONS_CHANNEL_ID: GUILD, ITAD_API_KEY_FILE: '/itad' };
     expect(loadConfig(env, () => 'itad-key\n').gameSuggestions).toEqual({ forumChannelId: GUILD, itadApiKey: 'itad-key' });

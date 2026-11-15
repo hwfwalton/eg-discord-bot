@@ -25,11 +25,21 @@ export function describePlan(plan: Plan, session: Session, startChannelId: strin
       return [
         `✅ **${plan.label ? `${plan.label}: ` : ''}${plan.game}**. On ${when(session.startsAt)} I'll post this in <#${startChannelId}>:`,
         quote(startMessage(plan) ?? ''),
+        ...(plan.via === 'gemini'
+          ? [`-# [This announcement](${plan.source.url}) doesn't follow the usual template, so Gemini read it. Please double-check the game!`]
+          : []),
       ].join('\n');
     case 'cancelled':
       return [
         `🚫 **No session** on ${when(session.startsAt)}, so I won't post anything.`,
-        `-# I spotted “${plan.phrase}” in [this announcement](${plan.source.url}).`,
+        plan.via === 'gemini'
+          ? `-# Gemini read [this announcement](${plan.source.url}) as a cancellation (“${plan.phrase}”).`
+          : `-# I spotted “${plan.phrase}” in [this announcement](${plan.source.url}).`,
+      ].join('\n');
+    case 'unsure':
+      return [
+        `⚠️ I'm not sure what's happening on ${when(session.startsAt)}: [this post](${plan.source.url}) ${plan.reason}.`,
+        `To be safe I **won't** post anything. If the session is on, post or edit an announcement using the usual template (\`we'll be playing...\` and the game in bold).`,
       ].join('\n');
     case 'none':
       return [
@@ -37,6 +47,14 @@ export function describePlan(plan: Plan, session: Session, startChannelId: strin
         "I look for the usual template: `we'll be playing...` followed by the game in bold, e.g. `**Hades II**`.",
       ].join('\n');
   }
+}
+
+/** DM to an announcement's author when game time came but the bot held off because it was unsure. */
+export function heldOffMessage(plan: Extract<Plan, { kind: 'unsure' }>): string {
+  return [
+    `⚠️ It's game time, but I didn't post the start message: [this post](${plan.source.url}) ${plan.reason}.`,
+    "If the session is on, you may want to post the start message yourself.",
+  ].join('\n');
 }
 
 function quote(text: string): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describePlan, startMessage } from './messages.ts';
+import { describePlan, heldOffMessage, startMessage } from './messages.ts';
 import type { Plan, Session } from './plan.ts';
 
 const source = { id: '1', url: 'https://discord.com/channels/1/2/3', authorId: '9', content: '', createdAt: new Date() };
@@ -38,5 +38,24 @@ describe('describePlan', () => {
 
   it('explains a cancellation and what triggered it', () => {
     expect(describePlan({ kind: 'cancelled', phrase: 'No official EG', source }, session, '42')).toContain('“No official EG”');
+  });
+
+  it('says when Gemini read the announcement', () => {
+    const game = describePlan({ kind: 'game', game: 'Sky Noon', via: 'gemini', source }, session, '42');
+    expect(game).toContain("doesn't follow the usual template, so Gemini read it");
+    const cancelled = describePlan({ kind: 'cancelled', phrase: 'Rain check this week', via: 'gemini', source }, session, '42');
+    expect(cancelled).toContain('Gemini read [this announcement]');
+    expect(cancelled).toContain('“Rain check this week”');
+    expect(describePlan({ kind: 'game', game: 'Sky Noon', source }, session, '42')).not.toContain('Gemini');
+  });
+
+  it("explains when it's unsure, and posts nothing", () => {
+    const plan = { kind: 'unsure' as const, reason: "couldn't be read because Gemini didn't respond", retryable: true, source };
+    expect(startMessage(plan)).toBeNull();
+    const text = describePlan(plan, session, '42');
+    expect(text).toContain("I'm not sure what's happening");
+    expect(text).toContain("[this post](https://discord.com/channels/1/2/3) couldn't be read because Gemini didn't respond.");
+    expect(text).toContain("**won't** post anything");
+    expect(heldOffMessage(plan)).toContain("didn't post the start message");
   });
 });

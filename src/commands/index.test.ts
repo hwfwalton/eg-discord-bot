@@ -6,7 +6,7 @@ describe('commands', () => {
   it('every command has a valid definition', () => {
     const all = buildCommands({
       gameNight: { describeNext: async () => '' },
-      gameSuggestions: { suggest: async () => ({ kind: 'invalid', reason: '' }), autocomplete: async () => [] },
+      gameSuggestions: { suggest: async () => ({ kind: 'invalid' as const, reason: '' }), autocomplete: async () => [] },
     });
     expect(all.map((c) => c.data.name)).toEqual(['ping', 'gamenight', 'suggest']);
     for (const command of all) {

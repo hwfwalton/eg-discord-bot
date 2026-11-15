@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readAnnouncement } from './announcement.ts';
+import { readAnnouncement, sessionLabelsIn, steamLinkFor } from './announcement.ts';
 
 // Modelled on the format of the weekly #announcements posts (the wording is made up).
 const weekly = (game: string, extra = '') =>
@@ -60,5 +60,30 @@ describe('readAnnouncement', () => {
 
   it('does not mistake ordinary words for cancellations', () => {
     expect(readAnnouncement('No need to bring anything, there are snacks').kind).toBe('unclear');
+  });
+});
+
+describe('steamLinkFor', () => {
+  const sky = 'https://store.steampowered.com/app/569530/Sky_Noon/';
+  const spells = 'https://store.steampowered.com/app/360620/Spellsworn/';
+
+  it("picks the link whose URL names the game", () => {
+    expect(steamLinkFor(`Instead of ${sky} we play ${spells}`, 'Spellsworn')).toBe(spells);
+    expect(steamLinkFor(`Instead of ${sky} we play ${spells}`, 'Sky Noon')).toBe(sky);
+  });
+
+  it("uses a post's only link even if its URL has no name", () => {
+    expect(steamLinkFor('Play it: https://store.steampowered.com/app/569530', 'Sky Noon')).toBe('https://store.steampowered.com/app/569530');
+  });
+
+  it('gives no link when several games are linked and none matches', () => {
+    expect(steamLinkFor(`${sky} ${spells}`, 'Hades II')).toBeUndefined();
+    expect(steamLinkFor('no links here', 'Hades II')).toBeUndefined();
+  });
+});
+
+describe('sessionLabelsIn', () => {
+  it('finds session names however they are spaced', () => {
+    expect(sessionLabelsIn('EG289 (or eg 290?) and EG 291')).toEqual(new Set(['EG289', 'EG290', 'EG291']));
   });
 });

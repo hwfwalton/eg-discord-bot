@@ -10,7 +10,12 @@ export interface GameNightConfig {
   schedule: string;
   /** IANA timezone the schedule is in, e.g. "America/Los_Angeles". */
   timezone: string;
+  /** Gemini reads announcements that don't follow the template; off when no API key is set. */
+  gemini?: { apiKey: string; model: string };
 }
+
+/** Gemini 3.5 Flash-Lite: stable, cheapest current Flash-Lite, on the API's free tier. */
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
 export interface GameSuggestionsConfig {
   /** Forum channel where each post's title is a suggested game. */
@@ -43,7 +48,7 @@ export function loadConfig(env: Env = process.env, readFile: ReadFile = defaultR
   return {
     token: loadToken(env, readFile),
     guildIds: parseGuildIds(env.GUILD_IDS),
-    gameNight: parseGameNight(env),
+    gameNight: parseGameNight(env, readFile),
     gameSuggestions: parseGameSuggestions(env, readFile),
   };
 }
@@ -81,7 +86,7 @@ function parseGuildIds(raw: string | undefined): string[] {
   return ids;
 }
 
-function parseGameNight(env: Env): GameNightConfig | undefined {
+function parseGameNight(env: Env, readFile: ReadFile): GameNightConfig | undefined {
   const announcementsChannelId = optionalId(env, 'GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID');
   const startChannelId = optionalId(env, 'GAME_NIGHT_CHANNEL_ID');
   if (!announcementsChannelId && !startChannelId) return undefined;
@@ -102,7 +107,12 @@ function parseGameNight(env: Env): GameNightConfig | undefined {
     throw new Error(`GAME_NIGHT_SCHEDULE "${schedule}" isn't a valid cron pattern: ${(err as Error).message}`);
   }
 
-  return { announcementsChannelId, startChannelId, schedule, timezone };
+  const geminiApiKey = readSecret(env, 'GEMINI_API_KEY', readFile);
+  const gemini = geminiApiKey
+    ? { apiKey: geminiApiKey, model: env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL }
+    : undefined;
+
+  return { announcementsChannelId, startChannelId, schedule, timezone, ...(gemini && { gemini }) };
 }
 
 function parseGameSuggestions(env: Env, readFile: ReadFile): GameSuggestionsConfig | undefined {
