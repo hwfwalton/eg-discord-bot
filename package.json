@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm test",
     "invite": "node --env-file-if-exists=.env src/scripts/invite-url.ts",
-    "lookup": "node src/scripts/lookup-game.ts"
+    "lookup": "node --env-file-if-exists=.env src/scripts/lookup-game.ts"
   },
   "dependencies": {
     "croner": "^11.0.1",

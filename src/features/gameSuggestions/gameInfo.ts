@@ -1,23 +1,44 @@
 // Looks up a suggested game and builds the reply.
 import { EmbedBuilder, type MessageCreateOptions } from 'discord.js';
+import { log } from '../../log.ts';
+import type { ItadClient, ItadDeals } from './itad.ts';
 import { type SteamGame, type SteamMatch, getSteamGame, pickMatch, searchSteam } from './steam.ts';
 
 export interface GameLookup {
   query: string;
   match?: SteamMatch;
   game?: SteamGame;
+  deals?: ItadDeals;
 }
 
-export async function lookUpGame(query: string, fetchFn: typeof fetch = fetch): Promise<GameLookup> {
+export interface LookupDeps {
+  fetchFn?: typeof fetch;
+  /** Optional: without it, replies just skip the deal info. */
+  itad?: ItadClient;
+}
+
+export async function lookUpGame(query: string, { fetchFn = fetch, itad }: LookupDeps = {}): Promise<GameLookup> {
   const match = pickMatch(query, await searchSteam(query, fetchFn));
   if (!match) return { query };
-  return { query, match, game: await getSteamGame(match.item.id, fetchFn) };
+  const game = await getSteamGame(match.item.id, fetchFn);
+  if (!game) return { query, match };
+
+  // Deals only matter for paid games.
+  let deals: ItadDeals | undefined;
+  if (itad && !game.isFree) {
+    try {
+      deals = await itad.dealsForSteamApp(game.id);
+    } catch (err) {
+      log.warn(`IsThereAnyDeal lookup failed for "${game.name}"; replying without deals`, err);
+    }
+  }
+  return { query, match, game, deals };
 }
 
 const STEAM_BLUE = 0x1b2838;
 const DESCRIPTION_LIMIT = 300;
 
-export function gameInfoMessage({ query, match, game }: GameLookup): MessageCreateOptions {
+export function gameInfoMessage({ query, match, game, deals }: GameLookup): MessageCreateOptions {
   if (!match || !game) {
     return { content: `🔍 I couldn't find **${query}** on Steam.`, allowedMentions: { parse: [] } };
   }
@@ -28,11 +49,24 @@ export function gameInfoMessage({ query, match, game }: GameLookup): MessageCrea
     .setURL(game.url)
     .setDescription(truncate(game.description, DESCRIPTION_LIMIT) || null)
     .addFields(
-      { name: 'Price', value: priceText(game), inline: true },
+      { name: 'Steam price', value: priceText(game), inline: true },
       { name: 'Released', value: game.comingSoon ? `Coming ${game.releaseDate ?? 'soon'}` : (game.releaseDate ?? '—'), inline: true },
       { name: 'Multiplayer', value: game.multiplayer.length ? game.multiplayer.join(', ') : 'Single-player only', inline: true },
-      { name: 'Links', value: `[Steam](${game.url})` },
     );
+
+  if (deals?.current) {
+    const c = deals.current;
+    const details = [c.cut > 0 ? `-${c.cut}%` : '', c.voucher ? `code \`${c.voucher}\`` : ''].filter(Boolean).join(', ');
+    embed.addFields({ name: 'Best price now', value: `[${c.price.text} at ${c.shop}](${c.url})${details ? ` (${details})` : ''}`, inline: true });
+  }
+  if (deals?.lowest) {
+    const l = deals.lowest;
+    const when = l.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+    embed.addFields({ name: 'Historical low', value: `${l.price.text} at ${l.shop} (${when})`, inline: true });
+  }
+
+  const links = [`[Steam](${game.url})`, ...(deals ? [`[IsThereAnyDeal](${deals.url})`] : [])];
+  embed.addFields({ name: 'Links', value: links.join(' · ') });
   if (game.headerImage) embed.setImage(game.headerImage);
 
   if (!match.exact) {

@@ -15,6 +15,8 @@ export interface GameNightConfig {
 export interface GameSuggestionsConfig {
   /** Forum channel where each post's title is a suggested game. */
   forumChannelId: string;
+  /** IsThereAnyDeal API key; without it, replies skip deal info. */
+  itadApiKey?: string;
 }
 
 export interface Config {
@@ -42,22 +44,25 @@ export function loadConfig(env: Env = process.env, readFile: ReadFile = defaultR
     token: loadToken(env, readFile),
     guildIds: parseGuildIds(env.GUILD_IDS),
     gameNight: parseGameNight(env),
-    gameSuggestions: parseGameSuggestions(env),
+    gameSuggestions: parseGameSuggestions(env, readFile),
   };
 }
 
 function loadToken(env: Env, readFile: ReadFile): string {
-  const direct = env.DISCORD_TOKEN?.trim();
+  const token = readSecret(env, 'DISCORD_TOKEN', readFile);
+  if (!token) throw new Error('Missing bot token: set DISCORD_TOKEN or DISCORD_TOKEN_FILE.');
+  return token;
+}
+
+/** Reads a secret from NAME, or from the file named by NAME_FILE. Undefined if neither is set. */
+export function readSecret(env: Env, name: string, readFile: ReadFile = defaultReadFile): string | undefined {
+  const direct = env[name]?.trim();
   if (direct) return direct;
 
-  const file = env.DISCORD_TOKEN_FILE?.trim();
-  if (!file) {
-    throw new Error('Missing bot token: set DISCORD_TOKEN or DISCORD_TOKEN_FILE.');
-  }
+  const file = env[`${name}_FILE`]?.trim();
+  if (!file) return undefined;
   const fromFile = readFile(file).trim();
-  if (!fromFile) {
-    throw new Error(`Token file ${file} is empty.`);
-  }
+  if (!fromFile) throw new Error(`${name}_FILE points at an empty file: ${file}`);
   return fromFile;
 }
 
@@ -100,9 +105,11 @@ function parseGameNight(env: Env): GameNightConfig | undefined {
   return { announcementsChannelId, startChannelId, schedule, timezone };
 }
 
-function parseGameSuggestions(env: Env): GameSuggestionsConfig | undefined {
+function parseGameSuggestions(env: Env, readFile: ReadFile): GameSuggestionsConfig | undefined {
   const forumChannelId = optionalId(env, 'GAME_SUGGESTIONS_CHANNEL_ID');
-  return forumChannelId ? { forumChannelId } : undefined;
+  if (!forumChannelId) return undefined;
+  const itadApiKey = readSecret(env, 'ITAD_API_KEY', readFile);
+  return { forumChannelId, ...(itadApiKey && { itadApiKey }) };
 }
 
 function optionalId(env: Env, name: string): string | undefined {

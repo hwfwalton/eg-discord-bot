@@ -33,6 +33,25 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ DISCORD_TOKEN: 't' }, noFile)).toThrow(/GUILD_IDS/);
     expect(() => loadConfig({ DISCORD_TOKEN: 't', GUILD_IDS: 'my-server' }, noFile)).toThrow(/my-server/);
   });
+
+  it('leaves features off when their channels are not set', () => {
+    const config = loadConfig({ DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_SUGGESTIONS_CHANNEL_ID: '' }, noFile);
+    expect(config.gameNight).toBeUndefined();
+    expect(config.gameSuggestions).toBeUndefined();
+  });
+
+  it('requires both game night channels together', () => {
+    expect(() =>
+      loadConfig({ DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID: GUILD }, noFile),
+    ).toThrow(/GAME_NIGHT_CHANNEL_ID/);
+  });
+
+  it('reads the optional ITAD key from ITAD_API_KEY_FILE', () => {
+    const env = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_SUGGESTIONS_CHANNEL_ID: GUILD, ITAD_API_KEY_FILE: '/itad' };
+    expect(loadConfig(env, () => 'itad-key\n').gameSuggestions).toEqual({ forumChannelId: GUILD, itadApiKey: 'itad-key' });
+    const withoutKey = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_SUGGESTIONS_CHANNEL_ID: GUILD };
+    expect(loadConfig(withoutKey, noFile).gameSuggestions).toEqual({ forumChannelId: GUILD });
+  });
 });
 
 describe('applicationIdFromToken', () => {

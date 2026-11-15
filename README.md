@@ -28,9 +28,10 @@ in the game-night channel.
 ### Game suggestions
 
 When someone creates a post in the suggestions forum, the bot looks up the post's title on Steam and replies
-with the store link, price, release date, multiplayer modes and a short description. If the name isn't an exact
-match, it says it's a best guess and lists other matches. Try it without Discord:
-`npm run lookup -- "deep rock"`.
+with the store link, price, release date, multiplayer modes and a short description. For paid games it adds
+the best current price across stores and the historical low from [IsThereAnyDeal](https://isthereanydeal.com),
+with a link to the game's page there (needs `ITAD_API_KEY`). If the name isn't an exact match, it says it's a
+best guess and lists other matches. Try it without Discord: `npm run lookup -- "deep rock"`.
 
 ## Local development
 
@@ -52,6 +53,7 @@ npm run invite           # prints the link for adding the bot to each server in 
 | `GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID`, `GAME_NIGHT_CHANNEL_ID` | Enable the game night reminder |
 | `GAME_NIGHT_SCHEDULE`, `GAME_NIGHT_TIMEZONE` | When sessions start (default `30 10 * * 6`, `America/Los_Angeles`) |
 | `GAME_SUGGESTIONS_CHANNEL_ID` | Enable game info replies in this forum channel |
+| `ITAD_API_KEY` / `ITAD_API_KEY_FILE` | IsThereAnyDeal API key for deal info (optional). The OAuth client ID/secret aren't needed. |
 
 To get a channel's ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click the channel → **Copy Channel ID**.
 
@@ -80,7 +82,8 @@ The NAS is x86-64 (`linux/amd64`). The simplest setup is to build the image on t
 
 1. Copy this project to a folder on the NAS, e.g. `/volume1/docker/eg-discord-bot`. `node_modules`, `.env`
    and `.git` aren't needed there.
-2. In that folder, create a `.env` file containing `DISCORD_TOKEN=<the bot token>`.
+2. In that folder, create a `.env` file containing `DISCORD_TOKEN=<the bot token>` and
+   `ITAD_API_KEY=<IsThereAnyDeal API key>`.
 3. Either:
    - **UGOS:** Docker → Project → Create, point it at that folder (it picks up `docker-compose.yml`), and deploy; or
    - **SSH:** `cd /volume1/docker/eg-discord-bot && docker compose up -d --build`

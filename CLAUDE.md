@@ -18,6 +18,10 @@ explain Discord-specific concepts (intents, permissions, interactions) when they
   optional and turn on when their env vars are set (`src/config.ts`).
 - Game night (`src/features/gameNight/`) is stateless: everything is re-derived from the #announcements
   history and the cron schedule (no database). Prefer not posting over a wrong @everyone ping.
+- Game suggestions (`src/features/gameSuggestions/`) use Steam's keyless store API plus IsThereAnyDeal's API
+  (API key only, as the `key` query param; the OAuth client ID/secret aren't used). ITAD is skipped for
+  free games and failures fall back to a Steam-only reply. The local key lives at
+  `~/.config/eg-discord-bot/itad-api-key`.
 - Keep gateway intents and invite permissions minimal. Add intents in `src/bot.ts` and permissions in
   `src/scripts/invite-url.ts` only when a feature needs them, and avoid privileged intents (Message Content).
 - Vitest for tests, colocated as `*.test.ts`. Run `npm run check` before calling work done.

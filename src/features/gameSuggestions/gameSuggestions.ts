@@ -4,14 +4,18 @@ import { Events, type AnyThreadChannel, type Client } from 'discord.js';
 import type { GameSuggestionsConfig } from '../../config.ts';
 import { log } from '../../log.ts';
 import { gameInfoMessage, lookUpGame } from './gameInfo.ts';
+import { createItadClient } from './itad.ts';
 
 export function registerGameSuggestions(client: Client, config: GameSuggestionsConfig): void {
+  const itad = config.itadApiKey ? createItadClient(config.itadApiKey) : undefined;
+  if (!itad) log.warn('No ITAD_API_KEY set; game suggestion replies will skip IsThereAnyDeal info');
+
   async function onThreadCreate(thread: AnyThreadChannel, newlyCreated: boolean): Promise<void> {
     if (!newlyCreated || thread.parentId !== config.forumChannelId || thread.ownerId === client.user?.id) return;
 
     const query = thread.name.trim();
     log.info(`Game suggestion: looking up "${query}"`);
-    const reply = gameInfoMessage(await lookUpGame(query));
+    const reply = gameInfoMessage(await lookUpGame(query, { itad }));
 
     // A forum post's opening message can arrive just after the thread itself, and Discord
     // rejects replies until it exists, so retry briefly.

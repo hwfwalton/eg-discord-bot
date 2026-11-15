@@ -1,5 +1,7 @@
 # Production deployment on the NAS.
-# Put a `.env` file next to this one containing:  DISCORD_TOKEN=<the bot token>
+# Put a `.env` file next to this one containing:
+#   DISCORD_TOKEN=<the bot token>
+#   ITAD_API_KEY=<IsThereAnyDeal API key>   (optional: game replies skip deal info without it)
 services:
   bot:
     build: .
@@ -17,6 +19,7 @@ services:
       GAME_NIGHT_TIMEZONE: America/Los_Angeles
       # Game info replies in the suggestions forum
       GAME_SUGGESTIONS_CHANNEL_ID: "678901234567890123" # #🤩-new-game-ideas
+      ITAD_API_KEY: ${ITAD_API_KEY:-}
     logging:
       driver: json-file
       options:
