@@ -4,8 +4,11 @@ import { ping } from './ping.ts';
 
 describe('commands', () => {
   it('every command has a valid definition', () => {
-    const all = buildCommands({ gameNight: { describeNext: async () => '' } });
-    expect(all.map((c) => c.data.name)).toEqual(['ping', 'gamenight']);
+    const all = buildCommands({
+      gameNight: { describeNext: async () => '' },
+      gameSuggestions: { suggest: async () => ({ kind: 'invalid', reason: '' }), autocomplete: async () => [] },
+    });
+    expect(all.map((c) => c.data.name)).toEqual(['ping', 'gamenight', 'suggest']);
     for (const command of all) {
       // toJSON runs discord.js's own validation (name format, description length, etc.)
       const json = command.data.toJSON();

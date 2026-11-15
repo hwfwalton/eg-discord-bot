@@ -22,26 +22,49 @@ export async function lookUpGame(query: string, { fetchFn = fetch, itad }: Looku
   if (!match) return { query };
   const game = await getSteamGame(match.item.id, fetchFn);
   if (!game) return { query, match };
+  return { query, match, game, deals: await dealsFor(game, itad) };
+}
 
+/** Looks up a game by its Steam app ID (e.g. from a store link). Undefined if Steam doesn't know it. */
+export async function lookUpSteamApp(
+  appId: number,
+  { fetchFn = fetch, itad }: LookupDeps = {},
+): Promise<GameLookup | undefined> {
+  const game = await getSteamGame(appId, fetchFn);
+  if (!game) return undefined;
+  const match = { item: { id: game.id, name: game.name }, exact: true, others: [] };
+  return { query: game.name, match, game, deals: await dealsFor(game, itad) };
+}
+
+async function dealsFor(game: SteamGame, itad: ItadClient | undefined): Promise<ItadDeals | undefined> {
   // Deals only matter for paid games.
-  let deals: ItadDeals | undefined;
-  if (itad && !game.isFree) {
-    try {
-      deals = await itad.dealsForSteamApp(game.id);
-    } catch (err) {
-      log.warn(`IsThereAnyDeal lookup failed for "${game.name}"; replying without deals`, err);
-    }
+  if (!itad || game.isFree) return undefined;
+  try {
+    return await itad.dealsForSteamApp(game.id);
+  } catch (err) {
+    log.warn(`IsThereAnyDeal lookup failed for "${game.name}"; replying without deals`, err);
+    return undefined;
   }
-  return { query, match, game, deals };
 }
 
 const STEAM_BLUE = 0x1b2838;
 const DESCRIPTION_LIMIT = 300;
 
-export function gameInfoMessage({ query, match, game, deals }: GameLookup): MessageCreateOptions {
-  if (!match || !game) {
-    return { content: `🔍 I couldn't find **${query}** on Steam.`, allowedMentions: { parse: [] } };
-  }
+/** The reply posted in a suggestion: the game's info card, or a note that it wasn't found. */
+export function gameInfoMessage(lookup: GameLookup): MessageCreateOptions {
+  const embed = gameInfoEmbed(lookup);
+  return embed
+    ? { embeds: [embed], allowedMentions: { parse: [] } }
+    : { content: notFoundText(lookup.query), allowedMentions: { parse: [] } };
+}
+
+export function notFoundText(query: string): string {
+  return `🔍 I couldn't find **${query}** on Steam.`;
+}
+
+/** The game's info card, or undefined when there's no Steam match. */
+export function gameInfoEmbed({ query, match, game, deals }: GameLookup): EmbedBuilder | undefined {
+  if (!match || !game) return undefined;
 
   const embed = new EmbedBuilder()
     .setColor(STEAM_BLUE)
@@ -75,7 +98,7 @@ export function gameInfoMessage({ query, match, game, deals }: GameLookup): Mess
     if (others) embed.addFields({ name: 'Other matches', value: others });
   }
 
-  return { embeds: [embed], allowedMentions: { parse: [] } };
+  return embed;
 }
 
 function priceText(game: SteamGame): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalize, pickMatch, toSteamGame } from './steam.ts';
+import { isUnwantedExtra, pickMatch, steamAppIdFromLink, toSteamGame } from './steam.ts';
 
 const item = (id: number, name: string) => ({ id, name });
 
@@ -29,12 +29,33 @@ describe('pickMatch', () => {
   it('returns nothing for no results', () => {
     expect(pickMatch('zzqq', [])).toBeUndefined();
   });
+
+  it('treats names that differ only in spacing as exact', () => {
+    expect(pickMatch('power wash simulator', [item(1, 'PowerWash Simulator')])).toMatchObject({ exact: true });
+  });
+
+  it("never treats a name with no Latin letters as exact, and falls back to Steam's top result", () => {
+    expect(pickMatch('原神', [item(1, '崩坏：星穹铁道'), item(2, '原神')])).toMatchObject({ item: { id: 1 }, exact: false });
+  });
 });
 
-describe('normalize', () => {
-  it('ignores case, punctuation, trademark symbols and accents', () => {
-    expect(normalize('Baldur’s Gate™ 3')).toBe(normalize("baldurs gate 3"));
-    expect(normalize('Pokémon')).toBe('pokemon');
+describe('steamAppIdFromLink', () => {
+  it.each([
+    ['https://store.steampowered.com/app/1145350/Hades_II/', 1145350],
+    ['<https://store.steampowered.com/app/569530>', 569530],
+    ['https://steamcommunity.com/app/360620/discussions/', 360620],
+    ['Hades II', undefined],
+    ['https://example.com/app/123', undefined],
+  ])('%s -> %s', (text, expected) => {
+    expect(steamAppIdFromLink(text)).toBe(expected);
+  });
+});
+
+describe('isUnwantedExtra', () => {
+  it('flags add-ons unless the query asks for them', () => {
+    expect(isUnwantedExtra('Hades II Original Soundtrack', 'hades')).toBe(true);
+    expect(isUnwantedExtra('Hades II', 'hades')).toBe(false);
+    expect(isUnwantedExtra('Plucked Demo', 'plucked demo')).toBe(false);
   });
 });
 

@@ -33,6 +33,22 @@ the best current price across stores and the historical low from [IsThereAnyDeal
 with a link to the game's page there (needs `ITAD_API_KEY`). If the name isn't an exact match, it says it's a
 best guess and lists other matches. Try it without Discord: `npm run lookup -- "deep rock"`.
 
+Members can also have the bot create the post for them, from any channel:
+
+- **`/suggest game:<name> [note]`**: the game option suggests Steam titles as you type (the one matching
+  what you typed comes first). You can also type any name, e.g. for non-Steam games. The reply is only
+  visible to you.
+- **`@EGBot <name>`** (or a Steam store link): mention the bot (the user or its role) at the start of a
+  message. Any further lines become the note. Because chat like "@EGBot thanks!" starts the same way, this
+  only creates a post when the name exactly matches a Steam game; otherwise the bot asks "Did you mean …?"
+  and points to `/suggest` for adding it as written. `@EGBot help` explains the options.
+
+The bot creates a post titled with the game's name (Steam's spelling when it's an exact match, e.g.
+"hades 2" → "Hades II"). Its opening message credits the suggester, quotes the note, and carries the info
+card. If a post for the game already exists, open or archived, the bot links to it instead. That
+includes posts whose names differ only in capitalization, punctuation, spacing or "II" vs "2", and
+Steam's best guess for an inexact name ("deep rock" → "Did you mean Deep Rock Galactic?").
+
 ## Local development
 
 Requires Node 24+.

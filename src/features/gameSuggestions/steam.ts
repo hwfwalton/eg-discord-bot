@@ -1,4 +1,5 @@
 // Steam store lookups via the public (keyless) store API.
+import { gameKey, normalizeGameName as normalize } from '../../gameName.ts';
 
 export interface SteamSearchItem {
   id: number;
@@ -32,9 +33,13 @@ type Fetch = typeof fetch;
 const API = 'https://store.steampowered.com/api';
 const TIMEOUT_MS = 10_000;
 
-export async function searchSteam(term: string, fetchFn: Fetch = fetch): Promise<SteamSearchItem[]> {
+export async function searchSteam(
+  term: string,
+  fetchFn: Fetch = fetch,
+  timeoutMs: number = TIMEOUT_MS,
+): Promise<SteamSearchItem[]> {
   const url = `${API}/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
-  const res = await fetchFn(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const res = await fetchFn(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`Steam search failed: HTTP ${res.status}`);
   const body = (await res.json()) as { items?: { id: number; name: string; type: string }[] };
   return (body.items ?? []).filter((i) => i.type === 'app').map(({ id, name }) => ({ id, name }));
@@ -95,16 +100,24 @@ export function toSteamGame(id: number, data: AppDetails): SteamGame {
 // Soundtracks, demos, etc. show up in search; skip them unless the query asks for one.
 const EXTRAS = /\b(?:soundtrack|ost|demo|playtest|artbook|dlc|season pass|expansion|bundle|dedicated server)\b/i;
 
+/** True for search results that are add-ons (soundtracks, demos, …) the query didn't ask for. */
+export function isUnwantedExtra(name: string, query: string): boolean {
+  return EXTRAS.test(name) && !EXTRAS.test(query);
+}
+
 /** Picks the most likely game for a query from Steam's search results. */
 export function pickMatch(query: string, items: SteamSearchItem[]): SteamMatch | undefined {
-  const wantsExtras = EXTRAS.test(query);
-  const candidates = wantsExtras ? items : items.filter((i) => !EXTRAS.test(i.name));
+  const candidates = items.filter((i) => !isUnwantedExtra(i.name, query));
   if (candidates.length === 0) return undefined;
 
-  const q = normalize(query);
-  const exact = candidates.find((i) => normalize(i.name) === q);
+  // A query with nothing to compare (e.g. a name in a non-Latin script) can't be an exact match:
+  // fall back to Steam's own top result as a guess.
+  const key = gameKey(query);
+  if (!key) return { item: candidates[0]!, exact: false, others: candidates.slice(1, 4) };
+
+  const exact = candidates.find((i) => gameKey(i.name) === key);
   // Otherwise: the shortest name containing every word of the query ("deep rock" -> "Deep Rock Galactic").
-  const words = q.split(' ').filter(Boolean);
+  const words = normalize(query).split(' ').filter(Boolean);
   const containing = candidates
     .filter((i) => {
       const nameWords = new Set(normalize(i.name).split(' '));
@@ -116,21 +129,12 @@ export function pickMatch(query: string, items: SteamSearchItem[]): SteamMatch |
   return { item, exact: Boolean(exact), others: candidates.filter((i) => i !== item).slice(0, 3) };
 }
 
-const ROMAN: Record<string, string> = { ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9', x: '10' };
+const STEAM_APP_LINK = /(?:store\.steampowered\.com|steamcommunity\.com)\/app\/(\d+)/i;
 
-/** Lowercase words with punctuation and ™/® removed, and roman numerals as digits. */
-export function normalize(name: string): string {
-  return name
-    .replace(/[™®©]/g, '') // before NFKD, which would turn ™ into "TM"
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '') // accents
-    .toLowerCase()
-    .replace(/['’]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .split(' ')
-    .map((w) => ROMAN[w] ?? w)
-    .join(' ');
+/** The app ID in a Steam store (or community hub) link, e.g. ".../app/1145350/Hades_II/" -> 1145350. */
+export function steamAppIdFromLink(text: string): number | undefined {
+  const id = text.match(STEAM_APP_LINK)?.[1];
+  return id ? Number(id) : undefined;
 }
 
 function decodeEntities(text: string): string {

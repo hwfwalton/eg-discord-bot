@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanGameName, readAnnouncement } from './announcement.ts';
+import { readAnnouncement } from './announcement.ts';
 
 // Modelled on the format of the weekly #announcements posts (the wording is made up).
 const weekly = (game: string, extra = '') =>
@@ -60,18 +60,5 @@ describe('readAnnouncement', () => {
 
   it('does not mistake ordinary words for cancellations', () => {
     expect(readAnnouncement('No need to bring anything, there are snacks').kind).toBe('unclear');
-  });
-});
-
-describe('cleanGameName', () => {
-  it.each([
-    ['🎮 Hades II', 'Hades II'],
-    ['[Hades II](https://store.steampowered.com/app/1145350)', 'Hades II'],
-    ['<:steam:123456789> Lethal Company:', 'Lethal Company'],
-    ['*Overcooked! 2*', 'Overcooked! 2'],
-    ['__Baldur’s Gate 3__ —', 'Baldur’s Gate 3'],
-    ['Stardew  Valley', 'Stardew Valley'],
-  ])('%s -> %s', (raw, expected) => {
-    expect(cleanGameName(raw)).toBe(expected);
   });
 });

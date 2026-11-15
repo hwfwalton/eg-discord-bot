@@ -8,6 +8,7 @@
 //
 // The game is the bolded text right after "playing". Posts without that template (reminders,
 // surveys, other news) only matter if they cancel, e.g. "**No official EG this weekend!**".
+import { cleanGameName } from '../../gameName.ts';
 
 export type Reading =
   | {
@@ -54,22 +55,4 @@ export function readAnnouncement(content: string): Reading {
   }
 
   return { kind: 'unclear' };
-}
-
-/** Strips Discord markup and decoration from a bolded span, leaving just the name. */
-export function cleanGameName(raw: string): string {
-  return (
-    raw
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [text](url) -> text
-      .replace(/<a?:\w+:\d+>/g, '') // custom emoji
-      .replace(/<(?:@[!&]?|#)\d+>/g, '') // user/role/channel mentions
-      .replace(/<t:\d+(?::[a-zA-Z])?>/g, '') // timestamps
-      .replace(/@(?:everyone|here)/g, '')
-      .replace(/(?:\*|__|~~)/g, '') // leftover italic/underline/strikethrough markers
-      .replace(/\s+/g, ' ')
-      // Trim emoji/punctuation from the start, and separators from the end (keep a trailing ! or ?).
-      .replace(/^[^\p{L}\p{N}]+/u, '')
-      .replace(/[\s:;,.\-–—|]+$/u, '')
-      .trim()
-  );
 }

@@ -22,8 +22,19 @@ explain Discord-specific concepts (intents, permissions, interactions) when they
   (API key only, as the `key` query param; the OAuth client ID/secret aren't used). ITAD is skipped for
   free games and failures fall back to a Steam-only reply. The local key lives at
   `~/.config/eg-discord-bot/itad-api-key`.
+- `/suggest` and "@EGBot <game>" (`suggest.ts`) create forum posts with the info card in the post's
+  opening message. Don't route bot-created posts through the ThreadCreate handler: discord.js reports
+  them with `newlyCreated: false` when the REST response wins the race with the gateway event. Posts
+  are de-duplicated against open and archived posts by `gameKey`. "@EGBot" passes
+  `requireExactMatch` so chat that starts with a mention never creates a post; `/suggest` doesn't.
+- Anything triggered by a message (not an interaction) must check it's in this instance's own server:
+  dev and prod share one bot account, so each instance sees the other server's messages.
+- Shared name helpers live in `src/gameName.ts`: `cleanGameName` (strip Discord markup; quotes and
+  brackets only in matching pairs, since game night uses it too), `displayGameName`, and the comparison
+  keys `normalizeGameName` (word-level) and `gameKey` (also ignores spacing; "" for non-Latin names).
 - Keep gateway intents and invite permissions minimal. Add intents in `src/bot.ts` and permissions in
-  `src/scripts/invite-url.ts` only when a feature needs them, and avoid privileged intents (Message Content).
+  `src/scripts/invite-url.ts` only when a feature needs them. Message Content (privileged) is enabled in
+  the Developer Portal and used by game night and "@EGBot"; avoid adding other privileged intents.
 - Vitest for tests, colocated as `*.test.ts`. Run `npm run check` before calling work done.
 - Config comes only from env (`src/config.ts`). Never commit tokens; the local token lives at
   `~/.config/eg-discord-bot/discord-bot-token`, referenced from the gitignored `.env`.

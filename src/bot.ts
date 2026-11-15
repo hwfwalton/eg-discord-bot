@@ -16,20 +16,21 @@ import { log } from './log.ts';
 
 export function createBot(config: Config): Client {
   const intents = [GatewayIntentBits.Guilds];
-  if (config.gameNight) {
-    // To read announcement posts as they're made. Message Content is a "privileged" intent:
-    // it must also be switched on for the bot in the Discord Developer Portal.
+  if (config.gameNight || config.gameSuggestions) {
+    // To read messages as they're posted: announcements (game night) and "@EGBot <game>" (suggestions).
+    // Message Content is a "privileged" intent: it must also be switched on for the bot in the
+    // Discord Developer Portal.
     intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
   }
   const client = new Client({ intents });
 
   const gameNight = config.gameNight ? registerGameNight(client, config.gameNight) : undefined;
-  if (config.gameSuggestions) registerGameSuggestions(client, config.gameSuggestions);
-  log.info(
-    `Features: game night ${gameNight ? 'on' : 'off'}, game suggestions ${config.gameSuggestions ? 'on' : 'off'}`,
-  );
+  const gameSuggestions = config.gameSuggestions
+    ? registerGameSuggestions(client, config.gameSuggestions)
+    : undefined;
+  log.info(`Features: game night ${gameNight ? 'on' : 'off'}, game suggestions ${gameSuggestions ? 'on' : 'off'}`);
 
-  const commands = buildCommands({ gameNight });
+  const commands = buildCommands({ gameNight, gameSuggestions });
   const byName = commandMap(commands);
 
   client.once(Events.ClientReady, async (ready) => {
@@ -74,7 +75,7 @@ async function handleInteraction(
   config: Config,
   byName: Map<string, Command>,
 ): Promise<void> {
-  if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isAutocomplete()) return;
 
   // Another instance of the bot (e.g. prod vs. local dev) may own this server; stay out of its way.
   if (!interaction.guildId || !config.guildIds.includes(interaction.guildId)) return;
@@ -82,6 +83,12 @@ async function handleInteraction(
   const command = byName.get(interaction.commandName);
   if (!command) {
     log.warn(`Received unknown command /${interaction.commandName}`);
+    return;
+  }
+
+  if (interaction.isAutocomplete()) {
+    // Best effort: if this fails or is too slow, Discord just shows no suggestions.
+    await command.autocomplete?.(interaction).catch((err: unknown) => log.warn(`/${interaction.commandName} autocomplete failed`, err));
     return;
   }
 
