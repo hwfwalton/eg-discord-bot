@@ -1,35 +1,56 @@
-// Reads a weekly #announcements post: the game is the first **bolded** text, and certain
-// phrases mean there's no session this week. Pure functions so they're easy to test.
+// Reads a weekly #announcements post. Pure functions so they're easy to test.
+//
+// Weekly posts follow a template:
+//
+//   @everyone
+//   For EG288 (11/14 @ 10:30am PT/1:30pm ET) we'll be playing...
+//   **Plucked Demo**!
+//
+// The game is the bolded text right after "playing". Posts without that template (reminders,
+// surveys, other news) only matter if they cancel, e.g. "**No official EG this weekend!**".
 
 export type Reading =
-  | { kind: 'game'; game: string }
+  | {
+      kind: 'game';
+      game: string;
+      /** The session's name, e.g. "EG288", if the post gives one. */
+      label?: string;
+      /** The game's Steam store link, if the post includes one. */
+      link?: string;
+    }
   | { kind: 'cancelled'; phrase: string }
   | { kind: 'unclear' };
 
-// Phrases that mean "no session this week". A cancellation wins over a bolded name, because a
-// wrong @everyone ping is worse than a missed one (and the DM confirmation catches misreads).
+// "playing" then optional "..."/":"/"!" and line breaks, then **Game**. The bold can't span lines.
+const PLAYING = /\bplaying\b[.…:!\s]*\*\*(?!\s)(.+?)(?<!\s)\*\*/i;
+const LABEL = /\bEG ?\d+\b/i;
+const STEAM_LINK = /https:\/\/store\.steampowered\.com\/app\/\d+[^\s)>]*/;
+
+// Phrases that mean "no session this week", checked only when a post doesn't use the template.
 const CANCEL_PATTERNS: RegExp[] = [
-  /\bno (?:game ?night|games?|gaming|sessions?|events?|meet ?ups?|meeting)\b/i,
+  /\bno (?:official )?(?:EG(?: ?\d+)?|game ?night|games?|gaming|sessions?|events?|meet ?ups?|meeting)\b/i,
+  /\bcancel(?:l?(?:ed|ing)|lation)?\b/i,
   /\bnot (?:meeting|playing|gaming)\b/i,
-  /\bcancel(?:l)?(?:ed|ing)\b/i,
   /\bskipping\b/i,
-  /\bskip (?:this|next) (?:week|saturday)\b/i,
-  /\b(?:week|saturday) off\b/i,
-  /\boff this (?:week|saturday)\b/i,
+  /\bskip (?:this|next) (?:week|weekend|saturday)\b/i,
+  /\b(?:week|weekend|saturday) off\b/i,
+  /\boff this (?:week|weekend|saturday)\b/i,
   /\btaking a (?:break|week off)\b/i,
 ];
 
-const BOLD = /\*\*(?!\s)(.+?)(?<!\s)\*\*/g;
-
 export function readAnnouncement(content: string): Reading {
+  // The template is a deliberate signal, so it wins over stray words like "cancel" in the blurb.
+  const playing = content.match(PLAYING);
+  const game = playing ? cleanGameName(playing[1] ?? '') : '';
+  if (playing && game) {
+    const label = content.slice(0, playing.index).match(LABEL)?.[0].replace(' ', '').toUpperCase();
+    const link = content.match(STEAM_LINK)?.[0];
+    return { kind: 'game', game, ...(label && { label }), ...(link && { link }) };
+  }
+
   for (const pattern of CANCEL_PATTERNS) {
     const match = content.match(pattern);
     if (match) return { kind: 'cancelled', phrase: match[0] };
-  }
-
-  for (const [, inner] of content.matchAll(BOLD)) {
-    const game = cleanGameName(inner ?? '');
-    if (game) return { kind: 'game', game };
   }
 
   return { kind: 'unclear' };

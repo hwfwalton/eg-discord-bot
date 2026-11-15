@@ -10,7 +10,12 @@ function when(date: Date): string {
 /** The @everyone post at session start, or null when nothing should be posted. */
 export function startMessage(plan: Plan): string | null {
   if (plan.kind !== 'game') return null;
-  return `@everyone 🎮 Game night is starting! This week we're playing **${plan.game}**.\n-# Details in [the announcement](${plan.source.url})`;
+  const starting = plan.label ? `**${plan.label}** is starting now!` : 'Game night is starting now!';
+  return [
+    `@everyone 🎮 ${starting} We're playing **${plan.game}**.`,
+    ...(plan.link ? [plan.link] : []),
+    `-# Details in [the announcement](${plan.source.url})`,
+  ].join('\n');
 }
 
 /** Describes what the bot will do at a session: used for the author DM and /gamenight. */
@@ -18,8 +23,8 @@ export function describePlan(plan: Plan, session: Session, startChannelId: strin
   switch (plan.kind) {
     case 'game':
       return [
-        `✅ **${plan.game}**: on ${when(session.startsAt)} I'll tell @everyone in <#${startChannelId}> that game night is starting.`,
-        `-# From [this announcement](${plan.source.url}).`,
+        `✅ **${plan.label ? `${plan.label}: ` : ''}${plan.game}**. On ${when(session.startsAt)} I'll post this in <#${startChannelId}>:`,
+        quote(startMessage(plan) ?? ''),
       ].join('\n');
     case 'cancelled':
       return [
@@ -28,9 +33,15 @@ export function describePlan(plan: Plan, session: Session, startChannelId: strin
       ].join('\n');
     case 'none':
       return [
-        `⚠️ I couldn't find a **bolded** game name or a “no session” phrase in any announcement since ${when(session.windowStart)}.`,
-        `As things stand I **won't** post anything on ${when(session.startsAt)}.`,
-        'To fix it, edit the announcement so the game name is in bold, e.g. `**Hades II**`.',
+        `⚠️ I haven't found this week's game in any announcement since ${when(session.windowStart)}, so I **won't** post anything on ${when(session.startsAt)}.`,
+        "I look for the usual template: `we'll be playing...` followed by the game in bold, e.g. `**Hades II**`.",
       ].join('\n');
   }
+}
+
+function quote(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
 }

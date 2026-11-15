@@ -10,7 +10,7 @@ export interface Announcement {
 }
 
 export type Plan =
-  | { kind: 'game'; game: string; source: Announcement }
+  | { kind: 'game'; game: string; label?: string; link?: string; source: Announcement }
   | { kind: 'cancelled'; phrase: string; source: Announcement }
   | { kind: 'none' };
 
@@ -34,7 +34,10 @@ export function decidePlan(announcements: Announcement[], session: Session): Pla
 
   for (const source of inWindow) {
     const reading = readAnnouncement(source.content);
-    if (reading.kind === 'game') return { kind: 'game', game: reading.game, source };
+    if (reading.kind === 'game') {
+      const { kind, ...game } = reading;
+      return { kind, ...game, source };
+    }
     if (reading.kind === 'cancelled') return { kind: 'cancelled', phrase: reading.phrase, source };
   }
   return { kind: 'none' };

@@ -36,7 +36,7 @@ describe('decidePlan', () => {
 
   it('uses the newest announcement that names a game', () => {
     const plan = decidePlan(
-      [post('playing **Hades II**', '2026-11-09T20:00:00Z'), post('playing **Factorio** instead', '2026-11-11T20:00:00Z')],
+      [post("we'll be playing **Hades II**", '2026-11-09T20:00:00Z'), post("we'll be playing **Factorio** instead", '2026-11-11T20:00:00Z')],
       session,
     );
     expect(plan).toMatchObject({ kind: 'game', game: 'Factorio' });
@@ -44,7 +44,7 @@ describe('decidePlan', () => {
 
   it('ignores newer posts that are not about game night', () => {
     const plan = decidePlan(
-      [post('playing **Hades II**', '2026-11-09T20:00:00Z'), post('Server rules updated', '2026-11-12T20:00:00Z')],
+      [post("we'll be playing **Hades II**", '2026-11-09T20:00:00Z'), post('Server rules updated', '2026-11-12T20:00:00Z')],
       session,
     );
     expect(plan).toMatchObject({ kind: 'game', game: 'Hades II' });
@@ -52,14 +52,14 @@ describe('decidePlan', () => {
 
   it('respects a cancellation posted after the game announcement', () => {
     const plan = decidePlan(
-      [post('playing **Hades II**', '2026-11-09T20:00:00Z'), post('Sorry, no game this week', '2026-11-13T20:00:00Z')],
+      [post("we'll be playing **Hades II**", '2026-11-09T20:00:00Z'), post('Sorry, no game this week', '2026-11-13T20:00:00Z')],
       session,
     );
     expect(plan).toMatchObject({ kind: 'cancelled' });
   });
 
   it("ignores last week's announcement", () => {
-    expect(decidePlan([post('playing **Hades II**', '2026-11-05T20:00:00Z')], session)).toEqual({ kind: 'none' });
+    expect(decidePlan([post("we'll be playing **Hades II**", '2026-11-05T20:00:00Z')], session)).toEqual({ kind: 'none' });
   });
 
   it('has no plan when nothing was announced', () => {

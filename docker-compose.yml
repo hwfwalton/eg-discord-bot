@@ -11,12 +11,12 @@ services:
       DISCORD_TOKEN: ${DISCORD_TOKEN:?Set DISCORD_TOKEN in a .env file next to docker-compose.yml}
       GUILD_IDS: "123456789012345678"
       # Game night reminder: Saturdays 10:30 Pacific (see .env.example for all options)
-      GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID: "" # TODO: #announcements channel ID
-      GAME_NIGHT_CHANNEL_ID: "" # TODO: channel for the @everyone start post
+      GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID: "456789012345678901" # #🔔announcements
+      GAME_NIGHT_CHANNEL_ID: "567890123456789012" # #gaming: where the @everyone start post goes
       GAME_NIGHT_SCHEDULE: "30 10 * * 6"
       GAME_NIGHT_TIMEZONE: America/Los_Angeles
       # Game info replies in the suggestions forum
-      GAME_SUGGESTIONS_CHANNEL_ID: "" # TODO: suggestions forum channel ID
+      GAME_SUGGESTIONS_CHANNEL_ID: "678901234567890123" # #🤩-new-game-ideas
     logging:
       driver: json-file
       options:
