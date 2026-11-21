@@ -4,7 +4,9 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   ChannelType,
+  DiscordAPIError,
   Events,
+  RESTJSONErrorCodes,
   type AnyThreadChannel,
   type ApplicationCommandOptionChoiceData,
   type Client,
@@ -13,9 +15,12 @@ import {
   type User,
 } from 'discord.js';
 import type { GameSuggestionsConfig } from '../../config.ts';
+import { createClaudeClient } from '../../claude.ts';
 import { log } from '../../log.ts';
 import { gameInfoMessage, lookUpGame } from './gameInfo.ts';
 import { createItadClient } from './itad.ts';
+import { createResearcher } from './research.ts';
+import { createTavilySearch } from './tavily.ts';
 import { searchSteam } from './steam.ts';
 import {
   type SuggestResult,
@@ -25,6 +30,7 @@ import {
   parseMention,
   resultText,
 } from './suggest.ts';
+import { chooseTags, mergeTagIds, missingTags, tagIdsToAdd } from './tags.ts';
 
 /** Discord gives autocomplete 3 seconds to answer; leave room for the reply itself. */
 const AUTOCOMPLETE_TIMEOUT_MS = 2_000;
@@ -38,6 +44,13 @@ export interface GameSuggestions {
 export function registerGameSuggestions(client: Client, config: GameSuggestionsConfig): GameSuggestions {
   const itad = config.itadApiKey ? createItadClient(config.itadApiKey) : undefined;
   if (!itad) log.warn('No ITAD_API_KEY set; game suggestion replies will skip IsThereAnyDeal info');
+  const webSearch = config.tavilyApiKey ? createTavilySearch(config.tavilyApiKey) : undefined;
+  const researcher = config.claude
+    ? createResearcher({ client: createClaudeClient(config.claude.apiKey), model: config.claude.model, webSearch })
+    : undefined;
+  if (!researcher) log.warn('No ANTHROPIC_API_KEY set; game suggestion replies will skip player counts and mods');
+  else if (!webSearch) log.info('No TAVILY_API_KEY set; player counts come from Steam and PCGamingWiki only');
+  let warnedAboutTagging = false;
 
   let forumChannel: ForumChannel | undefined;
   async function getForum(): Promise<ForumChannel> {
@@ -46,10 +59,12 @@ export function registerGameSuggestions(client: Client, config: GameSuggestionsC
     if (channel?.type !== ChannelType.GuildForum) {
       throw new Error(`GAME_SUGGESTIONS_CHANNEL_ID ${config.forumChannelId} isn't a forum channel the bot can see.`);
     }
+    const missing = missingTags(channel.availableTags ?? []);
+    if (missing.length) log.info(`Game ideas forum has no tag named ${missing.map((n) => `"${n}"`).join(', ')}; the bot won't apply those`);
     return (forumChannel = channel);
   }
 
-  const suggester = createSuggester(getForum, { itad });
+  const suggester = createSuggester(getForum, { itad, researcher });
 
   async function onThreadCreate(thread: AnyThreadChannel, newlyCreated: boolean): Promise<void> {
     // Posts the bot makes itself (via /suggest or @EGBot) already carry the info card.
@@ -57,7 +72,9 @@ export function registerGameSuggestions(client: Client, config: GameSuggestionsC
 
     const query = thread.name.trim();
     log.info(`Game suggestion: looking up "${query}"`);
-    const reply = gameInfoMessage(await lookUpGame(query, { itad }));
+    const lookup = await lookUpGame(query, { itad, researcher });
+    const reply = gameInfoMessage(lookup);
+    await addTags(thread, chooseTags(lookup));
 
     // A forum post's opening message can arrive just after the thread itself, and Discord
     // rejects replies until it exists, so retry briefly.
@@ -68,6 +85,24 @@ export function registerGameSuggestions(client: Client, config: GameSuggestionsC
       } catch (err) {
         if (attempt >= 4) throw err;
         await sleep(attempt * 1000);
+      }
+    }
+  }
+
+  /** Adds tags to a member's post (never removing theirs). Needs the Manage Threads permission. */
+  async function addTags(thread: AnyThreadChannel, names: string[]): Promise<void> {
+    const forum = await getForum();
+    const ids = tagIdsToAdd(thread.appliedTags, names, forum.availableTags ?? []);
+    const merged = mergeTagIds(thread.appliedTags, ids);
+    if (merged.length === thread.appliedTags.length) return;
+    try {
+      await thread.setAppliedTags(merged, 'Tags from the game info lookup');
+    } catch (err) {
+      if (err instanceof DiscordAPIError && err.code === RESTJSONErrorCodes.MissingPermissions) {
+        if (!warnedAboutTagging) log.warn('Can\'t tag members\' forum posts: give EGBot the "Manage Threads" permission in the game ideas forum');
+        warnedAboutTagging = true;
+      } else {
+        log.warn(`Tagging "${thread.name}" failed`, err);
       }
     }
   }

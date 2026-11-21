@@ -25,15 +25,15 @@ export function describePlan(plan: Plan, session: Session, startChannelId: strin
       return [
         `✅ **${plan.label ? `${plan.label}: ` : ''}${plan.game}**. On ${when(session.startsAt)} I'll post this in <#${startChannelId}>:`,
         quote(startMessage(plan) ?? ''),
-        ...(plan.via === 'gemini'
-          ? [`-# [This announcement](${plan.source.url}) doesn't follow the usual template, so Gemini read it. Please double-check the game!`]
+        ...(plan.via === 'claude'
+          ? [`-# [This announcement](${plan.source.url}) doesn't follow the usual template, so Claude read it. Please double-check the game!`]
           : []),
       ].join('\n');
     case 'cancelled':
       return [
         `🚫 **No session** on ${when(session.startsAt)}, so I won't post anything.`,
-        plan.via === 'gemini'
-          ? `-# Gemini read [this announcement](${plan.source.url}) as a cancellation (“${plan.phrase}”).`
+        plan.via === 'claude'
+          ? `-# Claude read [this announcement](${plan.source.url}) as a cancellation (“${plan.phrase}”).`
           : `-# I spotted “${plan.phrase}” in [this announcement](${plan.source.url}).`,
       ].join('\n');
     case 'unsure':

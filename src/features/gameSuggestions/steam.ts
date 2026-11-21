@@ -19,6 +19,12 @@ export interface SteamGame {
   comingSoon: boolean;
   /** Multiplayer modes, e.g. ["Online Co-op", "Online PvP"]. Empty if single-player only. */
   multiplayer: string[];
+  /** Runs on macOS, per Steam. */
+  mac: boolean;
+  /** Every Steam feature/category, e.g. "Remote Play Together" (context for research). */
+  features: string[];
+  /** The store page's "About this game" as plain text, shortened (context for research). */
+  about: string;
 }
 
 export interface SteamMatch {
@@ -62,7 +68,11 @@ interface AppDetails {
   price_overview?: { final_formatted: string; discount_percent: number };
   release_date?: { coming_soon: boolean; date: string };
   categories?: { id: number; description: string }[];
+  platforms?: { windows?: boolean; mac?: boolean; linux?: boolean };
+  about_the_game?: string;
 }
+
+const MAX_ABOUT_LENGTH = 4_000;
 
 // Steam category IDs for multiplayer modes, in display order.
 const MULTIPLAYER_CATEGORIES: [id: number, label: string][] = [
@@ -94,6 +104,9 @@ export function toSteamGame(id: number, data: AppDetails): SteamGame {
     releaseDate: data.release_date?.date || undefined,
     comingSoon: data.release_date?.coming_soon ?? false,
     multiplayer,
+    mac: data.platforms?.mac ?? false,
+    features: (data.categories ?? []).map((c) => c.description),
+    about: shortenAbout(htmlToText(data.about_the_game ?? '')),
   };
 }
 
@@ -135,6 +148,32 @@ const STEAM_APP_LINK = /(?:store\.steampowered\.com|steamcommunity\.com)\/app\/(
 export function steamAppIdFromLink(text: string): number | undefined {
   const id = text.match(STEAM_APP_LINK)?.[1];
   return id ? Number(id) : undefined;
+}
+
+const PLAYER_SENTENCE = /player|co-?op|multiplayer|friends|split.?screen|online|lobby|versus/i;
+
+/** Shortens long store text, keeping sentences about players first so the counts survive. */
+export function shortenAbout(text: string): string {
+  if (text.length <= MAX_ABOUT_LENGTH) return text;
+  const sentences = text.split(/(?<=[.!?\n])\s+/);
+  const ordered = [...sentences.filter((s) => PLAYER_SENTENCE.test(s)), ...sentences.filter((s) => !PLAYER_SENTENCE.test(s))];
+  let result = '';
+  for (const sentence of ordered) {
+    if (result.length + sentence.length + 1 > MAX_ABOUT_LENGTH) break;
+    result += `${sentence} `;
+  }
+  return result.trim();
+}
+
+function htmlToText(html: string): string {
+  return decodeEntities(
+    html
+      .replace(/<br\s*\/?>|<\/(?:p|li|h\d)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' '),
+  )
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim();
 }
 
 function decodeEntities(text: string): string {

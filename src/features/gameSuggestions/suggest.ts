@@ -8,11 +8,13 @@
 //
 // "@EGBot ..." only creates a post for an exact Steam match, since chat like "@EGBot thanks!" also
 // starts with a mention. `/suggest` is the deliberate route and accepts any name.
-import type {
-  ApplicationCommandOptionChoiceData,
-  ForumChannel,
-  GuildForumThreadMessageCreateOptions,
-  ThreadChannel,
+import {
+  DiscordAPIError,
+  RESTJSONErrorCodes,
+  type ApplicationCommandOptionChoiceData,
+  type ForumChannel,
+  type GuildForumThreadMessageCreateOptions,
+  type ThreadChannel,
 } from 'discord.js';
 import { cleanGameName, displayGameName, gameKey } from '../../gameName.ts';
 import { log } from '../../log.ts';
@@ -23,8 +25,10 @@ import {
   lookUpGame,
   lookUpSteamApp,
   notFoundText,
+  withResearch,
 } from './gameInfo.ts';
 import { type SteamSearchItem, isUnwantedExtra, steamAppIdFromLink } from './steam.ts';
+import { chooseTags, tagIdsFor } from './tags.ts';
 
 /** Discord's limit for post (thread) names. */
 export const MAX_TITLE_LENGTH = 100;
@@ -186,6 +190,9 @@ export interface Suggester {
 }
 
 export function createSuggester(getForum: () => Promise<ForumChannel>, deps: LookupDeps = {}): Suggester {
+  /** Suggestions being created, by gameKey of the post title. */
+  const inProgress = new Map<string, Promise<SuggestResult>>();
+
   return {
     async suggest({ game, note, userId, userTag, guildId, requireExactMatch = false }) {
       const appId = steamAppIdFromLink(game);
@@ -207,7 +214,9 @@ export function createSuggester(getForum: () => Promise<ForumChannel>, deps: Loo
 
       let lookup: GameLookup | undefined;
       try {
-        lookup = appId ? await lookUpSteamApp(appId, deps) : await lookUpGame(query, deps);
+        // Research (slow) waits until we know a post will be created; see below.
+        const quick = { ...deps, researcher: undefined };
+        lookup = appId ? await lookUpSteamApp(appId, quick) : await lookUpGame(query, quick);
       } catch (err) {
         log.warn(`Steam lookup failed for suggestion "${appId ?? query}"`, err);
       }
@@ -218,26 +227,49 @@ export function createSuggester(getForum: () => Promise<ForumChannel>, deps: Loo
       const name = appId && lookup ? lookup.query : query;
       const title = postTitle(name, lookup);
 
-      const posts = await listPosts(forum);
-      const existing = findExistingPost(posts, [title, name]);
-      if (existing) return { kind: 'exists', post: existing };
-
-      // "deep rock" isn't an exact match, but Steam's guess (Deep Rock Galactic) may already have a post.
-      const guess = lookup?.match && !lookup.match.exact && lookup.game ? displayGameName(lookup.game.name) : undefined;
-      const guessedPost = guess ? findExistingPost(posts, [guess]) : undefined;
-      if (guessedPost) return { kind: 'maybeExists', post: guessedPost };
-
-      if (requireExactMatch && !lookup?.match?.exact) {
-        return { kind: 'unsure', query: name, ...(guess && { guess }), ...(!lookup && { steamDown: true }) };
+      // Research takes a few seconds, so a repeated "@EGBot <game>" (or two people suggesting the same
+      // game) can arrive before the first post exists. It waits for that one instead of duplicating it.
+      const key = gameKey(title) || title.toLowerCase();
+      for (let earlier = inProgress.get(key); earlier; earlier = inProgress.get(key)) {
+        const result = await earlier.catch(() => undefined);
+        if (result?.kind === 'created') return { kind: 'exists', post: result.post };
       }
+      const run = createUnlessPosted();
+      inProgress.set(key, run);
+      // Registered before anyone waits on `run`, so the entry is gone by the time they check again.
+      run.finally(() => inProgress.delete(key)).catch(() => {});
+      return run;
 
-      const post = await forum.threads.create({
-        name: title,
-        message: starterMessage(name, lookup, userId, note),
-        reason: `Game suggestion from ${userTag}`,
-      });
-      log.info(`Created game suggestion post "${title}" for ${userTag}`);
-      return { kind: 'created', post };
+      async function createUnlessPosted(): Promise<SuggestResult> {
+        const posts = await listPosts(forum);
+        const existing = findExistingPost(posts, [title, name]);
+        if (existing) return { kind: 'exists', post: existing };
+
+        // "deep rock" isn't an exact match, but Steam's guess (Deep Rock Galactic) may already have a post.
+        const guess = lookup?.match && !lookup.match.exact && lookup.game ? displayGameName(lookup.game.name) : undefined;
+        const guessedPost = guess ? findExistingPost(posts, [guess]) : undefined;
+        if (guessedPost) return { kind: 'maybeExists', post: guessedPost };
+
+        if (requireExactMatch && !lookup?.match?.exact) {
+          return { kind: 'unsure', query: name, ...(guess && { guess }), ...(!lookup && { steamDown: true }) };
+        }
+
+        if (lookup) lookup = await withResearch(lookup, deps.researcher);
+        const message = starterMessage(name, lookup, userId, note);
+        const appliedTags = lookup ? tagIdsFor(chooseTags(lookup), forum.availableTags ?? []) : [];
+        const reason = `Game suggestion from ${userTag}`;
+        let post;
+        try {
+          post = await forum.threads.create({ name: title, message, appliedTags, reason });
+        } catch (err) {
+          // A tag the bot isn't allowed to set (e.g. a moderated one) shouldn't cost the whole post.
+          if (!(err instanceof DiscordAPIError && err.code === RESTJSONErrorCodes.MissingPermissions && appliedTags.length)) throw err;
+          log.warn(`Creating "${title}" with tags was refused; creating it without tags`, err);
+          post = await forum.threads.create({ name: title, message, appliedTags: [], reason });
+        }
+        log.info(`Created game suggestion post "${title}" for ${userTag}`);
+        return { kind: 'created', post };
+      }
     },
   };
 }

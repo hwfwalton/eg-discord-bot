@@ -12,6 +12,7 @@ const permissions = new PermissionsBitField([
   PermissionFlagsBits.ReadMessageHistory,
   PermissionFlagsBits.CreatePublicThreads,
   PermissionFlagsBits.SendMessagesInThreads,
+  PermissionFlagsBits.ManageThreads, // to add tags to members' game ideas posts
 ]);
 
 const { token, guildIds } = loadConfig();

@@ -6,7 +6,8 @@ import { Cron } from 'croner';
 import { Events, type Client, type Message, type PartialMessage, type TextBasedChannel } from 'discord.js';
 import type { GameNightConfig } from '../../config.ts';
 import { log } from '../../log.ts';
-import { createGeminiReader, withGeminiFallback } from './geminiReader.ts';
+import { createClaudeClient } from '../../claude.ts';
+import { createClaudeReader, withClaudeFallback } from './claudeReader.ts';
 import { describePlan, heldOffMessage, startMessage } from './messages.ts';
 import {
   type Announcement,
@@ -22,7 +23,7 @@ import {
 
 /** If the bot was offline at start time, still post when it comes back within this long. */
 const CATCH_UP_MS = 30 * 60_000;
-/** At game time, how long to wait between attempts when Gemini can't be reached (about 7 minutes in all). */
+/** At game time, how long to wait between attempts when Claude can't be reached (about 7 minutes in all). */
 const GAME_TIME_RETRY_DELAYS_MS = [60_000, 120_000, 240_000];
 
 export interface GameNight {
@@ -32,11 +33,14 @@ export interface GameNight {
 
 export function registerGameNight(client: Client, config: GameNightConfig): GameNight {
   const schedule = createSchedule(config.schedule, config.timezone);
-  // Template parser first; Gemini (if configured) for announcements that don't follow the template.
-  const read = withGeminiFallback(
-    config.gemini ? createGeminiReader({ ...config.gemini, timezone: config.timezone }) : undefined,
+  // Template parser first; Claude (if configured) for announcements that don't follow the template.
+  const { claude } = config;
+  const read = withClaudeFallback(
+    claude
+      ? createClaudeReader({ client: createClaudeClient(claude.apiKey), model: claude.model, timezone: config.timezone })
+      : undefined,
   );
-  log.info(`Game night: Gemini fallback ${config.gemini ? `on (${config.gemini.model})` : 'off (no GEMINI_API_KEY)'}`);
+  log.info(`Game night: Claude fallback ${claude ? `on (${claude.model})` : 'off (no ANTHROPIC_API_KEY)'}`);
 
   async function fetchTextChannel(id: string): Promise<TextBasedChannel> {
     const channel = await client.channels.fetch(id);
@@ -66,7 +70,7 @@ export function registerGameNight(client: Client, config: GameNightConfig): Game
 
   async function runSession(session: Session): Promise<void> {
     const at = session.startsAt.toISOString();
-    // If Gemini couldn't be reached, the start post can wait a few minutes for it to come back.
+    // If Claude couldn't be reached, the start post can wait a few minutes for it to come back.
     const plan = await planWithRetries(() => planFor(session), GAME_TIME_RETRY_DELAYS_MS, sleep, (wait) =>
       log.warn(`Game night ${at}: couldn't read an announcement; trying again in ${wait / 1000}s`),
     );
@@ -125,7 +129,7 @@ export function registerGameNight(client: Client, config: GameNightConfig): Game
     });
     log.info(`Game night scheduled; next session ${nextSession(schedule).startsAt.toISOString()}`);
 
-    // Read this week's announcements now, so any Gemini readings are cached well before game time
+    // Read this week's announcements now, so any Claude readings are cached well before game time
     // (the cache is in memory, so a restart empties it).
     planFor(nextSession(schedule))
       .then((plan) => log.info(`Game night: plan for the next session is "${plan.kind}"`))

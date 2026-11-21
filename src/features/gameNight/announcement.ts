@@ -18,13 +18,13 @@ export type Reading =
       label?: string;
       /** The game's Steam store link, if the post includes one. */
       link?: string;
-      /** Set when Gemini read the post because it didn't follow the template (see geminiReader.ts). */
-      via?: 'gemini';
+      /** Set when Claude read the post because it didn't follow the template (see claudeReader.ts). */
+      via?: 'claude';
     }
-  | { kind: 'cancelled'; phrase: string; via?: 'gemini' }
+  | { kind: 'cancelled'; phrase: string; via?: 'claude' }
   /** Neither names a game nor cancels (reminders, surveys, news). */
   | { kind: 'unclear' }
-  /** Gemini was asked but couldn't give a usable answer, so what the post says is unknown. */
+  /** Claude was asked but couldn't give a usable answer, so what the post says is unknown. */
   | { kind: 'unreadable'; reason: string; retryable: boolean };
 
 // "playing" then optional "..."/":"/"!" and line breaks, then **Game**. The bold can't span lines.

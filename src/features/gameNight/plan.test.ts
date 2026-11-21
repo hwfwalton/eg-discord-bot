@@ -90,58 +90,58 @@ describe('decidePlan', () => {
     const plan = await decidePlan([post('x', '2026-11-12T20:00:00Z')], session, () => ({
       kind: 'cancelled',
       phrase: 'rain check',
-      via: 'gemini',
+      via: 'claude',
     }));
-    expect(plan).toMatchObject({ kind: 'cancelled', phrase: 'rain check', via: 'gemini' });
+    expect(plan).toMatchObject({ kind: 'cancelled', phrase: 'rain check', via: 'claude' });
   });
 
-  describe('with a post Gemini read', () => {
+  describe('with a post Claude read', () => {
     const announcement = post("For EG289 we'll be playing...\n**Sky Noon**!", '2026-11-12T20:00:00Z', 'announcement');
     const reminder = post('Reminder: Sky Noon in an hour!', '2026-11-14T17:30:00Z', 'reminder');
-    const gemini = (game: string) => (p: Announcement) =>
-      p.id === 'reminder' ? { kind: 'game' as const, game, via: 'gemini' as const } : readAnnouncementStub(p);
+    const claude = (game: string) => (p: Announcement) =>
+      p.id === 'reminder' ? { kind: 'game' as const, game, via: 'claude' as const } : readAnnouncementStub(p);
 
     it('defers to the template announcement when it confirms the same game', async () => {
-      const plan = await decidePlan([announcement, reminder], session, gemini('sky noon'));
+      const plan = await decidePlan([announcement, reminder], session, claude('sky noon'));
       expect(plan).toMatchObject({ kind: 'game', game: 'Sky Noon', label: 'EG289', source: { id: 'announcement' } });
       expect(plan).not.toHaveProperty('via');
     });
 
     it('defers when the names differ only by extra words, e.g. "(PC only)"', async () => {
       for (const name of ['Sky Noon (PC only)', 'Sky']) {
-        const plan = await decidePlan([announcement, reminder], session, gemini(name));
+        const plan = await decidePlan([announcement, reminder], session, claude(name));
         expect(plan).toMatchObject({ kind: 'game', game: 'Sky Noon', source: { id: 'announcement' } });
       }
     });
 
     it("doesn't ping when it names a different game than the announcement", async () => {
-      const plan = await decidePlan([announcement, reminder], session, gemini('Spellsworn'));
+      const plan = await decidePlan([announcement, reminder], session, claude('Spellsworn'));
       expect(plan).toMatchObject({ kind: 'unsure', retryable: false, source: { id: 'reminder' } });
       expect(plan.kind === 'unsure' && plan.reason).toContain('**Spellsworn**');
     });
 
     it("doesn't ping when it names a game for a week an earlier post cancelled", async () => {
       const cancelled = post('**No official EG this weekend!**', '2026-11-13T20:00:00Z', 'cancel');
-      const plan = await decidePlan([announcement, cancelled, reminder], session, gemini('Sky Noon'));
+      const plan = await decidePlan([announcement, cancelled, reminder], session, claude('Sky Noon'));
       expect(plan).toMatchObject({ kind: 'unsure', source: { id: 'reminder' } });
       expect(plan.kind === 'unsure' && plan.reason).toContain('cancelled this session');
     });
 
     it('decides alone when no template announcement exists that week', async () => {
-      const plan = await decidePlan([reminder], session, gemini('Sky Noon'));
-      expect(plan).toMatchObject({ kind: 'game', game: 'Sky Noon', via: 'gemini', source: { id: 'reminder' } });
+      const plan = await decidePlan([reminder], session, claude('Sky Noon'));
+      expect(plan).toMatchObject({ kind: 'game', game: 'Sky Noon', via: 'claude', source: { id: 'reminder' } });
     });
 
     it('may cancel a week the announcement scheduled', async () => {
       const read = (p: Announcement) =>
-        p.id === 'reminder' ? { kind: 'cancelled' as const, phrase: 'rain check', via: 'gemini' as const } : readAnnouncementStub(p);
-      expect(await decidePlan([announcement, reminder], session, read)).toMatchObject({ kind: 'cancelled', via: 'gemini' });
+        p.id === 'reminder' ? { kind: 'cancelled' as const, phrase: 'rain check', via: 'claude' as const } : readAnnouncementStub(p);
+      expect(await decidePlan([announcement, reminder], session, read)).toMatchObject({ kind: 'cancelled', via: 'claude' });
     });
 
-    it("doesn't let an older post decide over a newer one Gemini couldn't read", async () => {
+    it("doesn't let an older post decide over a newer one Claude couldn't read", async () => {
       const read = (p: Announcement) =>
         p.id === 'reminder'
-          ? { kind: 'unreadable' as const, reason: "couldn't be read because Gemini didn't respond", retryable: true }
+          ? { kind: 'unreadable' as const, reason: "couldn't be read because Claude didn't answer", retryable: true }
           : readAnnouncementStub(p);
       expect(await decidePlan([announcement, reminder], session, read)).toMatchObject({
         kind: 'unsure',
@@ -167,7 +167,7 @@ describe('planWithRetries', () => {
     return async () => plans[Math.min(i++, plans.length - 1)]!;
   }
 
-  it('asks again while Gemini is unreachable, and uses the plan once it answers', async () => {
+  it('asks again while Claude is unreachable, and uses the plan once it answers', async () => {
     const sleeps: number[] = [];
     const plan = await planWithRetries(sequence(unreachable, unreachable, game), [10, 20, 40], async (ms) => sleeps.push(ms));
     expect(plan).toBe(game);

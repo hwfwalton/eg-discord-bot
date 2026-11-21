@@ -1,5 +1,5 @@
-import { Collection, type ForumChannel } from 'discord.js';
-import { describe, expect, it } from 'vitest';
+import { Collection, DiscordAPIError, RESTJSONErrorCodes, type ForumChannel } from 'discord.js';
+import { describe, expect, it, vi } from 'vitest';
 import {
   USAGE,
   autocompleteChoices,
@@ -55,7 +55,7 @@ describe('postTitle', () => {
   const lookup = (name: string, exact: boolean) => ({
     query: 'q',
     match: { item: { id: 1, name }, exact, others: [] },
-    game: { id: 1, name, url: '', description: '', isFree: true, comingSoon: false, multiplayer: [] },
+    game: { id: 1, name, url: '', description: '', isFree: true, comingSoon: false, multiplayer: [], mac: false, features: [], about: '' },
   });
 
   it("uses Steam's spelling for an exact match, without trademark symbols", () => {
@@ -161,13 +161,17 @@ describe('createSuggester', () => {
    * A forum whose archived posts are listed newest-archived first, `pageSize` at a time, honouring
    * `before` the way Discord does (so a wrong paging cursor would miss or repeat posts).
    */
-  function fakeForum({ active = [] as string[], archived = [] as string[], pageSize = 2, guildId = 'G' } = {}) {
-    const created: Created[] = [];
+  function fakeForum({ active = [] as string[], archived = [] as string[], pageSize = 2, guildId = 'G', refuseTags = false } = {}) {
+    const created: (Created & { appliedTags?: string[] })[] = [];
     const archivedCalls: { before?: Date }[] = [];
     const post = (name: string, archivedAt: Date | null): Post => ({ id: `post:${name}`, name, url: `https://discord.com/channels/G/post:${name}`, archivedAt });
     const archivedPosts = archived.map((name, i) => post(name, new Date(Date.UTC(2026, 0, 28 - i))));
     const forum = {
       guildId,
+      availableTags: [
+        { id: 'tag-free', name: 'Free' },
+        { id: 'tag-max4', name: 'Max 4 Players' },
+      ],
       threads: {
         fetchActive: async () => ({ threads: new Collection(active.map((name) => [name, post(name, null)])) }),
         fetchArchived: async (options: { before?: Date }) => {
@@ -176,7 +180,10 @@ describe('createSuggester', () => {
           const page = older.slice(0, pageSize);
           return { threads: new Collection(page.map((p) => [p.id, p])), hasMore: older.length > pageSize };
         },
-        create: async (options: Created) => {
+        create: async (options: Created & { appliedTags?: string[] }) => {
+          if (refuseTags && options.appliedTags?.length) {
+            throw Object.assign(Object.create(DiscordAPIError.prototype), { code: RESTJSONErrorCodes.MissingPermissions, message: 'Missing Permissions' });
+          }
           created.push(options);
           return { id: 'new-post', name: options.name, url: 'https://discord.com/channels/G/new-post' };
         },
@@ -218,6 +225,78 @@ describe('createSuggester', () => {
     expect(created[0]?.name).toBe('Hades II');
     expect(created[0]?.message.content).toBe('💡 Suggested by <@U1>\n> Sequel!');
     expect(created[0]?.message.embeds).toHaveLength(1);
+  });
+
+  it('tags a post for an exact Steam match, but not for a best guess', async () => {
+    const exact = fakeForum();
+    await createSuggester(async () => exact.forum, { fetchFn: steam([HADES]) }).suggest({ ...request, game: 'Hades II' });
+    expect(exact.created[0]?.appliedTags).toEqual(['tag-free']);
+
+    const guess = fakeForum();
+    await createSuggester(async () => guess.forum, { fetchFn: steam([DRG]) }).suggest({ ...request, game: 'deep rock' });
+    expect(guess.created[0]?.appliedTags).toEqual([]);
+  });
+
+  it("creates the post without tags if setting them is refused", async () => {
+    const { forum, created } = fakeForum({ refuseTags: true });
+    const result = await createSuggester(async () => forum, { fetchFn: steam([HADES]) }).suggest({ ...request, game: 'Hades II' });
+    expect(result.kind).toBe('created');
+    expect(created[0]?.appliedTags).toEqual([]);
+  });
+
+  it('makes one post when the same game is suggested again while the first is still being researched', async () => {
+    const researching: (() => void)[] = [];
+    const researcher = () => new Promise<undefined>((resolve) => researching.push(() => resolve(undefined)));
+    const { forum, created } = fakeForum();
+    const suggester = createSuggester(async () => forum, { fetchFn: steam([HADES]), researcher });
+
+    const first = suggester.suggest({ ...request, game: 'Hades II' });
+    await vi.waitFor(() => expect(researching).toHaveLength(1));
+    const second = suggester.suggest({ ...request, userId: 'U2', game: 'hades 2' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    for (const finish of researching) finish();
+
+    expect(await first).toMatchObject({ kind: 'created', post: { id: 'new-post' } });
+    expect(await second).toMatchObject({ kind: 'exists', post: { id: 'new-post' } });
+    expect(created).toHaveLength(1);
+  });
+
+  it('lets a waiting suggestion go ahead if the first one failed', async () => {
+    const { forum, created } = fakeForum();
+    const create = forum.threads.create.bind(forum.threads);
+    let attempts = 0;
+    forum.threads.create = (async (options: Parameters<typeof create>[0]) => {
+      if (++attempts === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        throw new Error('Discord is down');
+      }
+      return create(options);
+    }) as typeof create;
+    const suggester = createSuggester(async () => forum, { fetchFn: steam([HADES]) });
+
+    const [first, second] = await Promise.allSettled([
+      suggester.suggest({ ...request, game: 'Hades II' }),
+      suggester.suggest({ ...request, game: 'Hades II' }),
+    ]);
+    expect(first.status).toBe('rejected');
+    expect(second).toMatchObject({ status: 'fulfilled', value: { kind: 'created' } });
+    expect(created).toHaveLength(1);
+  });
+
+  it('researches only once a post will be created', async () => {
+    const researched: string[] = [];
+    const researcher = async (g: { name: string }) => {
+      researched.push(g.name);
+      return { onlinePlayers: 4, onlyOneCopyNeeded: false, sources: [] };
+    };
+    const existing = fakeForum({ active: ['Hades II'] });
+    await createSuggester(async () => existing.forum, { fetchFn: steam([HADES]), researcher }).suggest({ ...request, game: 'Hades II' });
+    expect(researched).toEqual([]);
+
+    const fresh = fakeForum();
+    await createSuggester(async () => fresh.forum, { fetchFn: steam([HADES]), researcher }).suggest({ ...request, game: 'Hades II' });
+    expect(researched).toEqual(['Hades II']);
+    expect(fresh.created[0]?.appliedTags).toEqual(['tag-free', 'tag-max4']);
   });
 
   it('cleans up the typed name', async () => {

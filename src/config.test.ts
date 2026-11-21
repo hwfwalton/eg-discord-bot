@@ -46,14 +46,30 @@ describe('loadConfig', () => {
     ).toThrow(/GAME_NIGHT_CHANNEL_ID/);
   });
 
-  it('turns on the Gemini fallback for game night when a key is set', () => {
+  it('turns on the Claude fallback for game night when a key is set', () => {
     const base = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID: GUILD, GAME_NIGHT_CHANNEL_ID: GUILD };
-    expect(loadConfig(base, noFile).gameNight?.gemini).toBeUndefined();
-    expect(loadConfig({ ...base, GEMINI_API_KEY_FILE: '/g' }, () => 'gkey\n').gameNight?.gemini).toEqual({
-      apiKey: 'gkey',
-      model: 'gemini-3.5-flash-lite',
+    expect(loadConfig(base, noFile).gameNight?.claude).toBeUndefined();
+    expect(loadConfig({ ...base, ANTHROPIC_API_KEY_FILE: '/a' }, () => 'sk-ant-x\n').gameNight?.claude).toEqual({
+      apiKey: 'sk-ant-x',
+      model: 'claude-opus-5-5',
     });
-    expect(loadConfig({ ...base, GEMINI_API_KEY: 'k', GEMINI_MODEL: 'gemini-x' }, noFile).gameNight?.gemini?.model).toBe('gemini-x');
+    expect(loadConfig({ ...base, ANTHROPIC_API_KEY: 'k', CLAUDE_MODEL: 'claude-haiku-5-5' }, noFile).gameNight?.claude?.model).toBe('claude-haiku-5-5');
+  });
+
+  it('rejects a CLAUDE_MODEL that isn\'t an API model ID', () => {
+    const env = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, ANTHROPIC_API_KEY: 'k', CLAUDE_MODEL: 'opus' };
+    expect(() => loadConfig(env, noFile)).toThrow(/CLAUDE_MODEL "opus"/);
+    expect(() => loadConfig({ ...env, CLAUDE_MODEL: 'claude-opus-5.5' }, noFile)).toThrow(/isn't a Claude API model ID/);
+    expect(loadConfig({ ...env, CLAUDE_MODEL: 'claude-haiku-4-5-20251001' }, noFile).gameNight).toBeUndefined();
+  });
+
+  it('sets up player research from the same Claude key, with optional Tavily web search', () => {
+    const env = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_SUGGESTIONS_CHANNEL_ID: GUILD, ANTHROPIC_API_KEY: 'a', TAVILY_API_KEY_FILE: '/t' };
+    expect(loadConfig(env, () => 'tvly-x\n').gameSuggestions).toEqual({
+      forumChannelId: GUILD,
+      claude: { apiKey: 'a', model: 'claude-opus-5-5' },
+      tavilyApiKey: 'tvly-x',
+    });
   });
 
   it('reads the optional ITAD key from ITAD_API_KEY_FILE', () => {

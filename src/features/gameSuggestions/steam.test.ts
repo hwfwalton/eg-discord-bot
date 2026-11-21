@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isUnwantedExtra, pickMatch, steamAppIdFromLink, toSteamGame } from './steam.ts';
+import { isUnwantedExtra, pickMatch, shortenAbout, steamAppIdFromLink, toSteamGame } from './steam.ts';
 
 const item = (id: number, name: string) => ({ id, name });
 
@@ -85,5 +85,28 @@ describe('toSteamGame', () => {
     });
     expect(game.multiplayer).toEqual(['Online Co-op', 'Online PvP']);
     expect(game.isFree).toBe(true);
+  });
+});
+
+describe('toSteamGame platform and text', () => {
+  it('reads Mac support, features and the About text', () => {
+    const game = toSteamGame(1, {
+      name: 'G',
+      is_free: false,
+      platforms: { windows: true, mac: true },
+      categories: [{ id: 44, description: 'Remote Play Together' }],
+      about_the_game: '<p>Fight with <b>up to 8</b> players &amp; friends.</p><br>More.',
+    });
+    expect(game).toMatchObject({ mac: true, features: ['Remote Play Together'] });
+    expect(game.about).toBe('Fight with up to 8 players & friends.\nMore.');
+  });
+});
+
+describe('shortenAbout', () => {
+  it('keeps sentences about players when the text is too long', () => {
+    const story = 'Long story sentence here. '.repeat(400);
+    const short = shortenAbout(`${story}Up to 8 players online.`);
+    expect(short.length).toBeLessThanOrEqual(4000);
+    expect(short.startsWith('Up to 8 players online.')).toBe(true);
   });
 });

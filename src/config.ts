@@ -10,18 +10,27 @@ export interface GameNightConfig {
   schedule: string;
   /** IANA timezone the schedule is in, e.g. "America/Los_Angeles". */
   timezone: string;
-  /** Gemini reads announcements that don't follow the template; off when no API key is set. */
-  gemini?: { apiKey: string; model: string };
+  /** Claude reads announcements that don't follow the template; off when no API key is set. */
+  claude?: ClaudeConfig;
 }
 
-/** Gemini 3.5 Flash-Lite: stable, cheapest current Flash-Lite, on the API's free tier. */
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
+export interface ClaudeConfig {
+  apiKey: string;
+  model: string;
+}
+
+/** Claude Opus 5.5. */
+export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
 
 export interface GameSuggestionsConfig {
   /** Forum channel where each post's title is a suggested game. */
   forumChannelId: string;
   /** IsThereAnyDeal API key; without it, replies skip deal info. */
   itadApiKey?: string;
+  /** Claude researches player counts and mods from Steam/PCGamingWiki/web text; off without a key. */
+  claude?: ClaudeConfig;
+  /** Tavily web search key: adds web results to that research. */
+  tavilyApiKey?: string;
 }
 
 export interface Config {
@@ -45,12 +54,25 @@ const SNOWFLAKE = /^\d{17,20}$/;
  * Reads config from environment variables. See .env.example for the full list.
  */
 export function loadConfig(env: Env = process.env, readFile: ReadFile = defaultReadFile): Config {
+  const claude = parseClaude(env, readFile);
   return {
     token: loadToken(env, readFile),
     guildIds: parseGuildIds(env.GUILD_IDS),
-    gameNight: parseGameNight(env, readFile),
-    gameSuggestions: parseGameSuggestions(env, readFile),
+    gameNight: parseGameNight(env, claude),
+    gameSuggestions: parseGameSuggestions(env, readFile, claude),
   };
+}
+
+/** The Claude API key and model both features use; undefined (Claude off) without a key. */
+export function parseClaude(env: Env, readFile: ReadFile = defaultReadFile): ClaudeConfig | undefined {
+  const apiKey = readSecret(env, 'ANTHROPIC_API_KEY', readFile);
+  if (!apiKey) return undefined;
+  const model = env.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL;
+  // Catches aliases like "opus" and typos like "claude-opus-5.5" before the first request fails.
+  if (!/^claude-[a-z0-9-]+$/.test(model)) {
+    throw new Error(`CLAUDE_MODEL "${model}" isn't a Claude API model ID (e.g. ${DEFAULT_CLAUDE_MODEL}).`);
+  }
+  return { apiKey, model };
 }
 
 function loadToken(env: Env, readFile: ReadFile): string {
@@ -86,7 +108,7 @@ function parseGuildIds(raw: string | undefined): string[] {
   return ids;
 }
 
-function parseGameNight(env: Env, readFile: ReadFile): GameNightConfig | undefined {
+function parseGameNight(env: Env, claude: ClaudeConfig | undefined): GameNightConfig | undefined {
   const announcementsChannelId = optionalId(env, 'GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID');
   const startChannelId = optionalId(env, 'GAME_NIGHT_CHANNEL_ID');
   if (!announcementsChannelId && !startChannelId) return undefined;
@@ -107,19 +129,15 @@ function parseGameNight(env: Env, readFile: ReadFile): GameNightConfig | undefin
     throw new Error(`GAME_NIGHT_SCHEDULE "${schedule}" isn't a valid cron pattern: ${(err as Error).message}`);
   }
 
-  const geminiApiKey = readSecret(env, 'GEMINI_API_KEY', readFile);
-  const gemini = geminiApiKey
-    ? { apiKey: geminiApiKey, model: env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL }
-    : undefined;
-
-  return { announcementsChannelId, startChannelId, schedule, timezone, ...(gemini && { gemini }) };
+  return { announcementsChannelId, startChannelId, schedule, timezone, ...(claude && { claude }) };
 }
 
-function parseGameSuggestions(env: Env, readFile: ReadFile): GameSuggestionsConfig | undefined {
+function parseGameSuggestions(env: Env, readFile: ReadFile, claude: ClaudeConfig | undefined): GameSuggestionsConfig | undefined {
   const forumChannelId = optionalId(env, 'GAME_SUGGESTIONS_CHANNEL_ID');
   if (!forumChannelId) return undefined;
   const itadApiKey = readSecret(env, 'ITAD_API_KEY', readFile);
-  return { forumChannelId, ...(itadApiKey && { itadApiKey }) };
+  const tavilyApiKey = readSecret(env, 'TAVILY_API_KEY', readFile);
+  return { forumChannelId, ...(itadApiKey && { itadApiKey }), ...(claude && { claude }), ...(tavilyApiKey && { tavilyApiKey }) };
 }
 
 function optionalId(env: Env, name: string): string | undefined {

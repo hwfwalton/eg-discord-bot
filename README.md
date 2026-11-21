@@ -20,20 +20,20 @@ Every Saturday at 10:30am Pacific (`GAME_NIGHT_SCHEDULE` / `GAME_NIGHT_TIMEZONE`
   The EG number and the post's Steam link are picked up too.
 - **No session:** posts without the template that say "no official EG", "cancel", "no game", "skipping this
   week", "week off", etc. mean the bot posts nothing.
-- **Anything else** (reworded announcements, "rain check this week, sick kiddo") is read by Gemini, if
-  `GEMINI_API_KEY` is set (free tier from [AI Studio](https://aistudio.google.com)). Gemini only gets posts the
-  template can't read, and its answer must match the post: the game, EG number and Steam link must all appear in it.
+- **Anything else** (reworded announcements, "rain check this week, sick kiddo") is read by Claude, if
+  `ANTHROPIC_API_KEY` is set (see [Claude API key](#claude-api-key)). Claude only gets posts the template
+  can't read, and its answer must match the post: the game, EG number and Steam link must all appear in it.
 - The newest post that names a game or cancels wins. Unrelated posts (surveys, recaps, other news) are skipped.
-- Posts only Gemini could read are handled cautiously, because **a wrong @everyone ping is worse than a missed one**:
-  - Gemini may cancel a session the announcement scheduled.
+- Posts only Claude could read are handled cautiously, because **a wrong @everyone ping is worse than a missed one**:
+  - Claude may cancel a session the announcement scheduled.
   - A post that confirms the announcement's game (e.g. a Saturday reminder) defers to the announcement.
   - A post that names a *different* game, or a game for a week that was cancelled, means **no post**: the DM
     explains, and you can fix it by posting or editing an announcement in the template.
-  - If Gemini can't read a post, nothing older is trusted over it, so **no post** either. At game time the bot
+  - If Claude can't read a post, nothing older is trusted over it, so **no post** either. At game time the bot
     retries for a few minutes first, then DMs the post's author that it held off.
 - If no post names a game or cancels, the bot **doesn't** post.
 - **Confirmation DM:** when you post or edit an announcement, the bot DMs you what it understood, quoting
-  the exact start post (and saying when Gemini read it). `/gamenight` shows the same thing at any time (only
+  the exact start post (and saying when Claude read it). `/gamenight` shows the same thing at any time (only
   you see the reply).
 - If the bot was offline at start time, it still posts if it comes back within 30 minutes. It never posts twice.
 
@@ -44,6 +44,22 @@ with the store link, price, release date, multiplayer modes and a short descript
 the best current price across stores and the historical low from [IsThereAnyDeal](https://isthereanydeal.com),
 with a link to the game's page there (needs `ITAD_API_KEY`). If the name isn't an exact match, it says it's a
 best guess and lists other matches. Try it without Discord: `npm run lookup -- "deep rock"`.
+
+**Players and mods** (needs `ANTHROPIC_API_KEY`): the card's Players line gives the max players online and in
+local play, any mod that raises the limit (e.g. ROUNDS: "Max 2 online · 2 local / Up to 16 with the Rounds
+With Friends mod"), and whether only the host needs to buy the game. The bot gathers the sources itself: the
+Steam page, the game's [PCGamingWiki](https://www.pcgamingwiki.com) entry and, with `TAVILY_API_KEY`, two
+[Tavily](https://tavily.com) web searches (2 of the free plan's 1,000 monthly credits per game). Claude only
+reads those, so every number and mod link must appear in them, and the card cites the web page it used.
+PCGamingWiki is credited with a link, as its CC BY-NC-SA license requires. It doesn't use Claude's own web
+search, which returns pages encrypted, so the bot couldn't check the numbers against them.
+Games nothing covers say "Max players not listed".
+
+**Tags:** the bot tags posts it creates, and adds (never removes) tags on members' posts:
+Free (free on Steam), MacOS (Mac support on Steam), Only One Copy Needed (a free Friend Pass app, or only the
+host needs to buy it), Max 4 Players (4 or fewer, no mod), Modding Needed (4 or fewer, but a mod raises it).
+Sale tags and Banked Keys are left to people. Tagging members' posts needs the **Manage Threads** permission
+in the forum (included in `npm run invite`).
 
 Members can also have the bot create the post for them, from any channel:
 
@@ -80,12 +96,22 @@ npm run invite           # prints the link for adding the bot to each server in 
 | `GUILD_IDS`          | Comma-separated server IDs this instance serves          |
 | `GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID`, `GAME_NIGHT_CHANNEL_ID` | Enable the game night reminder |
 | `GAME_NIGHT_SCHEDULE`, `GAME_NIGHT_TIMEZONE` | When sessions start (default `30 10 * * 6`, `America/Los_Angeles`) |
-| `GEMINI_API_KEY` / `GEMINI_API_KEY_FILE` | Gemini API key (free tier) for announcements that don't follow the template (optional) |
-| `GEMINI_MODEL` | Gemini model to use (default `gemini-3.5-flash-lite`) |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_API_KEY_FILE` | Claude API key: reads announcements that don't follow the template, and researches players and mods for game suggestions (optional) |
+| `CLAUDE_MODEL` | Claude model for those (default `claude-opus-5-5`; must support the effort setting, e.g. any 5.x model) |
+| `TAVILY_API_KEY` / `TAVILY_API_KEY_FILE` | Tavily key (free plan) for web search in the players/mods research (optional) |
 | `GAME_SUGGESTIONS_CHANNEL_ID` | Enable game info replies in this forum channel |
 | `ITAD_API_KEY` / `ITAD_API_KEY_FILE` | IsThereAnyDeal API key for deal info (optional). The OAuth client ID/secret aren't needed. |
 
 To get a channel's ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click the channel → **Copy Channel ID**.
+
+### Claude API key
+
+Claude Max, Ultra and Team plans include monthly API credits ($100 a month on Max). To use them, link a
+[Claude Console](https://platform.claude.com) organization in claude.ai under **Settings → Billing → API
+credits**, then create an API key in that organization. No payment method is needed: when the month's
+credits run out, requests stop (the bot then skips player research and leaves unusual announcements
+unread) until the next month's credits arrive. At this server's volume, the bot uses well under $1 a
+month. See [API credits for subscribers](https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers).
 
 The game night feature needs the **Message Content** intent, which is switched on in the
 [Developer Portal](https://discord.com/developers/applications) → Bot → Privileged Gateway Intents.
@@ -113,7 +139,8 @@ The NAS is x86-64 (`linux/amd64`). The simplest setup is to build the image on t
 1. Copy this project to a folder on the NAS, e.g. `/volume1/docker/eg-discord-bot`. `node_modules`, `.env`
    and `.git` aren't needed there.
 2. In that folder, create a `.env` file containing `DISCORD_TOKEN=<the bot token>`,
-   `ITAD_API_KEY=<IsThereAnyDeal API key>` and `GEMINI_API_KEY=<Gemini API key>`.
+   `ITAD_API_KEY=<IsThereAnyDeal API key>`, `ANTHROPIC_API_KEY=<Claude API key>` and
+   `TAVILY_API_KEY=<Tavily API key>`.
 3. Either:
    - **UGOS:** Docker → Project → Create, point it at that folder (it picks up `docker-compose.yml`), and deploy; or
    - **SSH:** `cd /volume1/docker/eg-discord-bot && docker compose up -d --build`

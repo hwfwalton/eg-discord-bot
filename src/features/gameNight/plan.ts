@@ -11,11 +11,11 @@ export interface Announcement {
 }
 
 export type Plan =
-  | { kind: 'game'; game: string; label?: string; link?: string; via?: 'gemini'; source: Announcement }
-  | { kind: 'cancelled'; phrase: string; via?: 'gemini'; source: Announcement }
+  | { kind: 'game'; game: string; label?: string; link?: string; via?: 'claude'; source: Announcement }
+  | { kind: 'cancelled'; phrase: string; via?: 'claude'; source: Announcement }
   /**
-   * A post Gemini read couldn't be read, or contradicts the week's announcement. No start post:
-   * a wrong @everyone ping is worse than a missed one. `retryable` when Gemini was unreachable.
+   * A post Claude read couldn't be read, or contradicts the week's announcement. No start post:
+   * a wrong @everyone ping is worse than a missed one. `retryable` when Claude was unreachable.
    */
   | { kind: 'unsure'; reason: string; retryable: boolean; source: Announcement }
   | { kind: 'none' };
@@ -38,12 +38,12 @@ export interface Session {
  *
  * The newest post that names a game or cancels wins; posts that do neither (reminders, surveys,
  * news) are skipped, so they don't override the weekly announcement. Posts are read newest first
- * and only until one decides, so a slower reader (Gemini) runs rarely.
+ * and only until one decides, so a slower reader (Claude) runs rarely.
  *
- * Posts only Gemini could read get extra care, since a wrong @everyone ping is worse than a
+ * Posts only Claude could read get extra care, since a wrong @everyone ping is worse than a
  * missed one:
- * - If Gemini couldn't read a post, nothing older is trusted over it: no start post.
- * - Gemini may cancel a session, but it can't announce a game that contradicts the week's
+ * - If Claude couldn't read a post, nothing older is trusted over it: no start post.
+ * - Claude may cancel a session, but it can't announce a game that contradicts the week's
  *   template announcement (a different game, or a cancelled session): no start post either.
  * - If it confirms the announcement's game (e.g. a reminder), the announcement is used.
  */
@@ -62,9 +62,9 @@ export async function decidePlan(
     if (reading.kind === 'unreadable') {
       return { kind: 'unsure', reason: reading.reason, retryable: reading.retryable, source };
     }
-    if (reading.via !== 'gemini' || reading.kind === 'cancelled') return planFrom(reading, source);
+    if (reading.via !== 'claude' || reading.kind === 'cancelled') return planFrom(reading, source);
 
-    // Gemini read this post as naming a game: check it against the week's template announcement.
+    // Claude read this post as naming a game: check it against the week's template announcement.
     const announced = templateDecision(inWindow.slice(index + 1));
     if (!announced) return planFrom(reading, source);
     if (announced.kind === 'game' && sameGame(announced.game, reading.game)) return announced;
@@ -88,7 +88,7 @@ function planFrom(reading: Extract<Reading, { kind: 'game' | 'cancelled' }>, sou
   return { kind, ...details, source };
 }
 
-/** The newest decision the template parser alone finds in these posts. Never calls Gemini. */
+/** The newest decision the template parser alone finds in these posts. Never calls Claude. */
 function templateDecision(posts: Announcement[]): Decision | undefined {
   for (const source of posts) {
     const reading = readAnnouncement(source.content);
@@ -107,7 +107,7 @@ function sameGame(a: string, b: string): boolean {
 }
 
 /**
- * Gets the plan, asking again after each delay while it's "unsure" only because Gemini couldn't
+ * Gets the plan, asking again after each delay while it's "unsure" only because Claude couldn't
  * be reached. Used at game time, where a few minutes' delay beats a wrong or missed post.
  */
 export async function planWithRetries(
