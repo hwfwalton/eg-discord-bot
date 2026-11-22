@@ -134,16 +134,26 @@ Servers:
 
 ## Deploying to the NAS (UGREEN DXP2800)
 
-The NAS is x86-64 (`linux/amd64`). The simplest setup is to build the image on the NAS itself:
+The NAS is x86-64 (`linux/amd64`) and builds the image itself, from the source in its `docker`
+shared folder. The bot runs there as the UGOS Docker project `eg-discord-bot`.
 
-1. Copy this project to a folder on the NAS, e.g. `/volume1/docker/eg-discord-bot`. `node_modules`, `.env`
-   and `.git` aren't needed there.
+1. Copy the committed source to the NAS over SSH (as `<nas-user>`, with key login):
+
+   ```bash
+   git archive HEAD | ssh <user>@<host> 'mkdir -p /volume1/docker/eg-discord-bot && tar -x -C /volume1/docker/eg-discord-bot'
+   ```
+
 2. In that folder, create a `.env` file containing `DISCORD_TOKEN=<the bot token>`,
    `ITAD_API_KEY=<IsThereAnyDeal API key>`, `ANTHROPIC_API_KEY=<Claude API key>` and
-   `TAVILY_API_KEY=<Tavily API key>`.
-3. Either:
-   - **UGOS:** Docker → Project → Create, point it at that folder (it picks up `docker-compose.yml`), and deploy; or
-   - **SSH:** `cd /volume1/docker/eg-discord-bot && docker compose up -d --build`
-4. Check the logs (UGOS container logs, or `docker logs -f eg-discord-bot`) for `Registered … command(s)`.
+   `TAVILY_API_KEY=<Tavily API key>`, and `chmod 600` it: files in the shared folder are readable by every
+   NAS account by default.
+3. In UGOS: **Docker → Project → Create**. Name it `eg-discord-bot`, set the storage path to
+   `docker/eg-discord-bot`, paste `docker-compose.yml` into **Compose configuration**, and deploy. UGOS saves
+   the configuration as `docker-compose.yaml` in that folder.
+4. Check the project's **Logs** tab for `Registered … command(s)`.
 
-To update, copy the new source over and rebuild (`docker compose up -d --build`).
+To update: copy the new source over (step 1), then in UGOS open the project's **Compose configuration** tab
+and click **Redeploy**. `pull_policy: build` makes that rebuild the image from the new source.
+
+Files from the shared folder reach the image as mode 0770, so the Dockerfile makes them readable for the
+unprivileged `node` user (without it the bot fails with "Cannot read package config … permission denied").

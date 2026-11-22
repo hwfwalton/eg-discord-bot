@@ -7,6 +7,9 @@
 services:
   bot:
     build: .
+    # Always build from this folder's source (never look for the image on Docker Hub), so
+    # redeploying after copying new source picks it up.
+    pull_policy: build
     image: eg-discord-bot:latest
     container_name: eg-discord-bot
     restart: unless-stopped
