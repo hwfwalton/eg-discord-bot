@@ -72,8 +72,9 @@ Members can also have the bot create the post for them, from any channel:
   and points to `/suggest` for adding it as written. `@EGBot help` explains the options.
 
 The bot creates a post titled with the game's name (Steam's spelling when it's an exact match, e.g.
-"hades 2" → "Hades II"). Its opening message credits the suggester, quotes the note, and carries the info
-card. If a post for the game already exists, open or archived, the bot links to it instead. That
+"hades 2" → "Hades II"). Its opening message carries the info card, and the bot's first reply credits the
+suggester and quotes the note: Discord's channel list only shows posts as recently active once they have a
+reply. If a post for the game already exists, open or archived, the bot links to it instead. That
 includes posts whose names differ only in capitalization, punctuation, spacing or "II" vs "2", and
 Steam's best guess for an inexact name ("deep rock" → "Did you mean Deep Rock Galactic?").
 

@@ -42,7 +42,8 @@ explain Discord-specific concepts (intents, permissions, interactions) when they
   encrypted (only short quotes are readable), so numbers couldn't be checked. Tags (`tags.ts`) follow
   the forum's conventions; adding tags to members' posts needs Manage Threads (never remove theirs).
 - `/suggest` and "@EGBot <game>" (`suggest.ts`) create forum posts with the info card in the post's
-  opening message. Don't route bot-created posts through the ThreadCreate handler: discord.js reports
+  opening message and the suggester's credit as the first reply (posts with no replies don't show as
+  active in the channel list). Don't route bot-created posts through the ThreadCreate handler: discord.js reports
   them with `newlyCreated: false` when the REST response wins the race with the gateway event. Posts
   are de-duplicated against open and archived posts by `gameKey`. "@EGBot" passes
   `requireExactMatch` so chat that starts with a mention never creates a post; `/suggest` doesn't.

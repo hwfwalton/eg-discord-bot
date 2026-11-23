@@ -4,6 +4,7 @@ import {
   USAGE,
   autocompleteChoices,
   createSuggester,
+  creditMessage,
   findExistingPost,
   parseMention,
   postTitle,
@@ -87,25 +88,30 @@ describe('findExistingPost', () => {
 });
 
 describe('starterMessage', () => {
-  it('credits the suggester, quotes the note, and pings nobody', () => {
-    const message = starterMessage('Sky Noon', undefined, '42', 'So fun\n@everyone join');
-    expect(message.content).toBe('💡 Suggested by <@42>\n> So fun\n> @everyone join');
-    expect(message.allowedMentions).toEqual({ parse: [] });
-    expect(message.embeds).toEqual([]);
+  it("says when the game isn't on Steam, or Steam couldn't be reached", () => {
+    expect(starterMessage('Skribbl.io', { query: 'Skribbl.io' })).toEqual({
+      content: "🔍 I couldn't find **Skribbl.io** on Steam.",
+      allowedMentions: { parse: [] },
+    });
+    expect(starterMessage('Sky Noon', undefined).content).toBe("⚠️ I couldn't reach Steam to look up **Sky Noon**.");
   });
+});
 
-  it("says when the game isn't on Steam", () => {
-    expect(starterMessage('Skribbl.io', { query: 'Skribbl.io' }, '42').content).toContain(
-      "couldn't find **Skribbl.io** on Steam",
-    );
+describe('creditMessage', () => {
+  it('credits the suggester, quotes the note, and pings nobody', () => {
+    expect(creditMessage('42', 'So fun\n@everyone join')).toEqual({
+      content: '💡 Suggested by <@42>\n> So fun\n> @everyone join',
+      allowedMentions: { parse: [] },
+    });
+    expect(creditMessage('42', '  ').content).toBe('💡 Suggested by <@42>');
   });
 
   it("stays within Discord's 2000-character limit even for a note with many short lines", () => {
     const note = Array.from({ length: 500 }, () => 'a').join('\n');
-    const content = starterMessage('Skribbl.io', { query: 'Skribbl.io' }, '42', note).content ?? '';
+    const content = creditMessage('42', note).content ?? '';
     expect(content.length).toBeLessThanOrEqual(2000);
+    expect(content).toMatch(/^💡 Suggested by <@42>\n> a\n/);
     expect(content).toContain('…');
-    expect(content).toContain("couldn't find **Skribbl.io** on Steam");
   });
 });
 
@@ -154,15 +160,17 @@ describe('autocompleteChoices', () => {
 });
 
 describe('createSuggester', () => {
-  type Created = { name: string; message: { content: string; embeds: unknown[] } };
+  type Created = { name: string; message: { content?: string; embeds?: unknown[] } };
   type Post = { id: string; name: string; url: string; archivedAt: Date | null };
 
   /**
    * A forum whose archived posts are listed newest-archived first, `pageSize` at a time, honouring
    * `before` the way Discord does (so a wrong paging cursor would miss or repeat posts).
    */
-  function fakeForum({ active = [] as string[], archived = [] as string[], pageSize = 2, guildId = 'G', refuseTags = false } = {}) {
+  function fakeForum({ active = [] as string[], archived = [] as string[], pageSize = 2, guildId = 'G', refuseTags = false, refuseReplies = false } = {}) {
     const created: (Created & { appliedTags?: string[] })[] = [];
+    /** Replies the bot sent in the posts it created. */
+    const replies: { content?: string }[] = [];
     const archivedCalls: { before?: Date }[] = [];
     const post = (name: string, archivedAt: Date | null): Post => ({ id: `post:${name}`, name, url: `https://discord.com/channels/G/post:${name}`, archivedAt });
     const archivedPosts = archived.map((name, i) => post(name, new Date(Date.UTC(2026, 0, 28 - i))));
@@ -185,11 +193,15 @@ describe('createSuggester', () => {
             throw Object.assign(Object.create(DiscordAPIError.prototype), { code: RESTJSONErrorCodes.MissingPermissions, message: 'Missing Permissions' });
           }
           created.push(options);
-          return { id: 'new-post', name: options.name, url: 'https://discord.com/channels/G/new-post' };
+          const send = async (reply: { content?: string }) => {
+            if (refuseReplies) throw new Error('Missing Access');
+            replies.push(reply);
+          };
+          return { id: 'new-post', name: options.name, url: 'https://discord.com/channels/G/new-post', send };
         },
       },
     };
-    return { forum: forum as unknown as ForumChannel, created, archivedCalls, archivedPosts };
+    return { forum: forum as unknown as ForumChannel, created, replies, archivedCalls, archivedPosts };
   }
 
   /** Steam's search + app details for a set of (free) games. */
@@ -214,8 +226,8 @@ describe('createSuggester', () => {
   const HADES = { id: 1145350, name: 'Hades II' };
   const DRG = { id: 548430, name: 'Deep Rock Galactic' };
 
-  it("creates a post titled with Steam's spelling, with the info card in its opening message", async () => {
-    const { forum, created } = fakeForum({ active: ['Sky Noon'] });
+  it("creates a post titled with Steam's spelling, with the info card in its opening message and the credit as a reply", async () => {
+    const { forum, created, replies } = fakeForum({ active: ['Sky Noon'] });
     const suggester = createSuggester(async () => forum, { fetchFn: steam([HADES]) });
 
     const result = await suggester.suggest({ ...request, game: 'hades 2', note: 'Sequel!' });
@@ -223,8 +235,16 @@ describe('createSuggester', () => {
     expect(result).toEqual({ kind: 'created', post: expect.objectContaining({ id: 'new-post' }) });
     expect(created).toHaveLength(1);
     expect(created[0]?.name).toBe('Hades II');
-    expect(created[0]?.message.content).toBe('💡 Suggested by <@U1>\n> Sequel!');
+    expect(created[0]?.message.content).toBeUndefined();
     expect(created[0]?.message.embeds).toHaveLength(1);
+    expect(replies).toEqual([{ content: '💡 Suggested by <@U1>\n> Sequel!', allowedMentions: { parse: [] } }]);
+  });
+
+  it("still reports the post as created if the credit reply can't be sent", async () => {
+    const { forum, created } = fakeForum({ refuseReplies: true });
+    const result = await createSuggester(async () => forum, { fetchFn: steam([HADES]) }).suggest({ ...request, game: 'Hades II' });
+    expect(result.kind).toBe('created');
+    expect(created).toHaveLength(1);
   });
 
   it('tags a post for an exact Steam match, but not for a best guess', async () => {
@@ -341,14 +361,15 @@ describe('createSuggester', () => {
   });
 
   it('still creates the post when Steam is unreachable', async () => {
-    const { forum, created } = fakeForum();
+    const { forum, created, replies } = fakeForum();
     const suggester = createSuggester(async () => forum, { fetchFn: steamDown });
 
     const result = await suggester.suggest({ ...request, game: 'Sky Noon' });
 
     expect(result.kind).toBe('created');
     expect(created[0]?.name).toBe('Sky Noon');
-    expect(created[0]?.message).toMatchObject({ content: '💡 Suggested by <@U1>', embeds: [] });
+    expect(created[0]?.message.content).toContain("couldn't reach Steam");
+    expect(replies.map((r) => r.content)).toEqual(['💡 Suggested by <@U1>']);
   });
 
   it('looks up a pasted Steam store link by its app ID', async () => {

@@ -14,6 +14,7 @@ import {
   type ApplicationCommandOptionChoiceData,
   type ForumChannel,
   type GuildForumThreadMessageCreateOptions,
+  type MessageCreateOptions,
   type ThreadChannel,
 } from 'discord.js';
 import { cleanGameName, displayGameName, gameKey } from '../../gameName.ts';
@@ -117,29 +118,31 @@ export function findExistingPost<T extends { name: string }>(posts: Iterable<T>,
 }
 
 /**
- * The new post's opening message: who suggested it, their note, and the game's info card.
- * `lookup` is undefined when Steam couldn't be reached, in which case the card is just left out.
+ * The new post's opening message: the game's info card, or a line saying why there isn't one.
+ * `lookup` is undefined when Steam couldn't be reached.
  */
-export function starterMessage(
-  query: string,
-  lookup: GameLookup | undefined,
-  suggestedById: string,
-  note?: string,
-): GuildForumThreadMessageCreateOptions {
-  const header = `💡 Suggested by <@${suggestedById}>`;
+export function starterMessage(query: string, lookup: GameLookup | undefined): GuildForumThreadMessageCreateOptions {
   const embed = lookup ? gameInfoEmbed(lookup) : undefined;
-  const footer = lookup && !embed ? notFoundText(query) : undefined;
+  if (embed) return { embeds: [embed], allowedMentions: { parse: [] } };
+  // A forum post's opening message can't be empty.
+  const content = lookup ? notFoundText(query) : `⚠️ I couldn't reach Steam to look up **${query}**.`;
+  return { content, allowedMentions: { parse: [] } };
+}
 
+/**
+ * The first reply in a new post: who suggested it, and their note. A reply rather than part of the
+ * opening message, so the post counts as active in Discord's channel list (posts with no replies don't).
+ */
+export function creditMessage(suggestedById: string, note?: string): MessageCreateOptions {
+  const header = `💡 Suggested by <@${suggestedById}>`;
   const lines = [header];
   const trimmedNote = note?.trim();
   if (trimmedNote) {
     // Quoting adds "> " per line, so cap the result too, not just the note.
-    const budget = MAX_CONTENT_LENGTH - header.length - 1 - (footer ? footer.length + 1 : 0);
-    lines.push(truncate(quote(truncate(trimmedNote, MAX_NOTE_LENGTH)), budget));
+    lines.push(truncate(quote(truncate(trimmedNote, MAX_NOTE_LENGTH)), MAX_CONTENT_LENGTH - header.length - 1));
   }
-  if (footer) lines.push(footer);
   // No pings: not the suggester, and not anything their note mentions.
-  return { content: lines.join('\n'), embeds: embed ? [embed] : [], allowedMentions: { parse: [] } };
+  return { content: lines.join('\n'), allowedMentions: { parse: [] } };
 }
 
 export function resultText(result: SuggestResult): string {
@@ -255,7 +258,7 @@ export function createSuggester(getForum: () => Promise<ForumChannel>, deps: Loo
         }
 
         if (lookup) lookup = await withResearch(lookup, deps.researcher);
-        const message = starterMessage(name, lookup, userId, note);
+        const message = starterMessage(name, lookup);
         const appliedTags = lookup ? tagIdsFor(chooseTags(lookup), forum.availableTags ?? []) : [];
         const reason = `Game suggestion from ${userTag}`;
         let post;
@@ -268,6 +271,12 @@ export function createSuggester(getForum: () => Promise<ForumChannel>, deps: Loo
           post = await forum.threads.create({ name: title, message, appliedTags: [], reason });
         }
         log.info(`Created game suggestion post "${title}" for ${userTag}`);
+        try {
+          await post.send(creditMessage(userId, note));
+        } catch (err) {
+          // The post exists, so this is still a success for the suggester.
+          log.warn(`Crediting ${userTag} in "${title}" failed`, err);
+        }
         return { kind: 'created', post };
       }
     },
