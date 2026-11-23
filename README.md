@@ -155,9 +155,10 @@ To update, push to `master`, wait for the CI run to finish, and run `docker comp
 compose file's `pull_policy: always` fetches the newest image. To roll back, change `latest` to an older
 commit's `sha-…` tag (listed on the package's GitHub page).
 
-In a fork, Actions publishes `ghcr.io/<you>/<repo>` instead: point `image:` at it, and make the package
-public in its settings (GitHub makes new packages private), or log the host in to ghcr.io. To build
-on the host from source instead, replace `image:` and `pull_policy:` with `build: .`.
+In a fork, Actions publishes `ghcr.io/<you>/<repo>` instead: point `image:` at it. A package published from
+a public repo has been public here; if yours is private, make it public in the package's settings or log the
+host in to ghcr.io. To build on the host from source instead, replace `image:` and `pull_policy:` with
+`build: .`.
 
 ### On a UGREEN NAS (UGOS)
 
@@ -166,7 +167,10 @@ on the host from source instead, replace `image:` and `pull_policy:` with `build
 - In UGOS: **Docker → Project → Create**, set the storage path to that folder, paste `docker-compose.yml`
   into **Compose configuration**, and deploy. UGOS saves it as `docker-compose.yaml` in the folder.
 - To update: once the CI run has finished, open the project's **Compose configuration** tab and click
-  **Redeploy**. It pulls the newest image either way, so the "Pull the latest image" box doesn't matter.
+  **Redeploy**. The compose file's `pull_policy: always` makes it fetch the newest image (ticking "Pull the
+  latest image" does no harm).
+- UGOS's editor auto-indents YAML as you type, which can break a pasted file. If it does, paste the same
+  configuration as one line of JSON instead (Compose accepts JSON).
 
 If you build from source on the NAS instead, note that files from a shared folder reach the image as mode
 0770; the Dockerfile makes them readable for the unprivileged `node` user (without that, the bot fails with
