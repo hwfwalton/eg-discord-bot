@@ -14,7 +14,7 @@ import type { Announcement, ReadPost, Session } from './plan.ts';
 
 /** Discord posts are at most 4000 characters; don't send more than that. */
 const MAX_POST_CHARS = 4_000;
-/** Readings are remembered per post version so the Saturday run rarely needs to ask again. */
+/** Readings are remembered per post version so the game-time run rarely needs to ask again. */
 const MAX_CACHED = 200;
 const MAX_GAME_NAME = 100;
 const MAX_EVIDENCE = 80;
@@ -27,7 +27,7 @@ export interface ClaudeReaderOptions {
 }
 
 const INSTRUCTIONS = `You classify posts from the #announcements channel of a small Discord gaming community.
-The group plays a game together most Saturdays at 10:30am Pacific. Each session is called "EG" followed by its number. The organizer announces each week's game in this channel, and sometimes cancels a session.
+The group plays a game together on a regular schedule, usually weekly. Each session is called "EG" followed by its number. The organizer announces each week's game in this channel, and sometimes cancels a session.
 
 You get one post, when it was posted, and when the next session starts. Decide what the post says about that next session:
 - "game": the post says which game the group will play at that session. This includes a changed or replacement game, and a reminder that names the game. Set "game" to the game's name as written in the post: keep words that are part of the name (like "Demo"), and drop surrounding punctuation, emoji and formatting.

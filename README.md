@@ -1,10 +1,12 @@
 # eg-discord-bot
 
-A small helper bot for our community Discord server, written in TypeScript with [discord.js](https://discord.js.org).
+A small helper bot for a community Discord server, written in TypeScript with [discord.js](https://discord.js.org).
+It was built for one gaming group's weekly game night and game ideas forum, so some behaviour follows that
+group's conventions (described below), but every feature is optional and configured through environment variables.
 
 ## How it works
 
-- The bot opens an **outbound** WebSocket connection to Discord. No ports need to be opened on the NAS.
+- The bot opens an **outbound** WebSocket connection to Discord. No ports need to be opened on the host.
 - Features are **slash commands** (`/ping`, …) registered per server on startup, so changes appear right away.
 - Node 24 runs the `.ts` files directly, so there's no build step. `tsc` only type-checks.
 
@@ -58,8 +60,9 @@ Games nothing covers say "Max players not listed".
 **Tags:** the bot tags posts it creates, and adds (never removes) tags on members' posts:
 Free (free on Steam), MacOS (Mac support on Steam), Only One Copy Needed (a free Friend Pass app, or only the
 host needs to buy it), Max 4 Players (4 or fewer, no mod), Modding Needed (4 or fewer, but a mod raises it).
-Sale tags and Banked Keys are left to people. Tagging members' posts needs the **Manage Threads** permission
-in the forum (included in `npm run invite`).
+Sale tags and Banked Keys are left to people. The forum needs tags with these names (matched ignoring case);
+the bot skips any it can't find. Tagging members' posts needs the **Manage Threads** permission in the forum
+(included in `npm run invite`; a forum's own permission settings call it **Manage Posts**).
 
 Members can also have the bot create the post for them, from any channel:
 
@@ -77,6 +80,21 @@ suggester and quotes the note: Discord's channel list only shows posts as recent
 reply. If a post for the game already exists, open or archived, the bot links to it instead. That
 includes posts whose names differ only in capitalization, punctuation, spacing or "II" vs "2", and
 Steam's best guess for an inexact name ("deep rock" → "Did you mean Deep Rock Galactic?").
+
+## Setting up the Discord application
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application,
+   then open **Bot** and reset the token to get one. Keep it secret: anyone with it can act as the bot.
+2. On the same page, under **Privileged Gateway Intents**, turn on **Message Content**. Game night needs it
+   to read #announcements, and game suggestions need it for "@EGBot" messages.
+3. Turn off **Public Bot**, so only you can add the bot to servers. (The bot ignores servers that aren't in
+   `GUILD_IDS` anyway.) If the portal refuses, first set **Installation → Install Link** to **None**.
+4. Once your `.env` is set up (below), `npm run invite` prints the link that adds the bot to each server in
+   `GUILD_IDS` with the permissions its features need.
+
+Running a test copy next to the real one? Give it its own application ("MyBot Dev") and a test server. The
+code copes with two copies sharing one application (each only answers in its own `GUILD_IDS`, and
+message-triggered features check the server), but both then act as the same bot account.
 
 ## Local development
 
@@ -103,29 +121,16 @@ npm run invite           # prints the link for adding the bot to each server in 
 | `GAME_SUGGESTIONS_CHANNEL_ID` | Enable game info replies in this forum channel |
 | `ITAD_API_KEY` / `ITAD_API_KEY_FILE` | IsThereAnyDeal API key for deal info (optional). The OAuth client ID/secret aren't needed. |
 
-To get a channel's ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click the channel → **Copy Channel ID**.
+To get a server's or channel's ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click
+it → **Copy Server ID** / **Copy Channel ID**.
 
 ### Claude API key
 
-Claude Max, Ultra and Team plans include monthly API credits ($100 a month on Max). To use them, link a
-[Claude Console](https://platform.claude.com) organization in claude.ai under **Settings → Billing → API
-credits**, then create an API key in that organization. No payment method is needed: when the month's
-credits run out, requests stop (the bot then skips player research and leaves unusual announcements
-unread) until the next month's credits arrive. At this server's volume, the bot uses well under $1 a
-month. See [API credits for subscribers](https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers).
-
-The game night feature needs the **Message Content** intent, which is switched on in the
-[Developer Portal](https://discord.com/developers/applications) → Bot → Privileged Gateway Intents.
-
-Servers:
-
-- **Dev (test server):** `234567890123456789`
-- **Prod:** `123456789012345678`
-
-> ⚠️ Dev and prod currently share **one** bot application. Each instance only *answers* commands
-> in its own `GUILD_IDS`, but while both are running they share one bot account and identity.
-> If that gets confusing, create a second application ("EGBot Dev") in the
-> [Developer Portal](https://discord.com/developers/applications) and use its token locally.
+Create an API key in the [Claude Console](https://platform.claude.com). Some Claude subscriptions include
+monthly API credits you can use instead; see
+[API credits for subscribers](https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers).
+If the key's credits run out, requests just fail: the bot skips player research and leaves unusual
+announcements unread until there are credits again. For a small server it uses well under $1 a month.
 
 ## Adding a command
 
@@ -133,28 +138,37 @@ Servers:
 2. Add it to the list in `src/commands/index.ts`.
 3. Restart the bot. Commands are re-registered on startup.
 
-## Deploying to the NAS (UGREEN DXP2800)
+## Deploying with Docker Compose
 
-The NAS is x86-64 (`linux/amd64`) and builds the image itself, from the source in its `docker`
-shared folder. The bot runs there as the UGOS Docker project `eg-discord-bot`.
+The bot runs anywhere Docker Compose does, and builds its image from the source on that machine.
 
-1. Copy the committed source to the NAS over SSH (as `<nas-user>`, with key login):
+1. Copy the committed source to the machine, for example over SSH:
 
    ```bash
-   git archive HEAD | ssh <user>@<host> 'mkdir -p /volume1/docker/eg-discord-bot && tar -x -C /volume1/docker/eg-discord-bot'
+   git archive HEAD | ssh <user>@<host> 'mkdir -p ~/eg-discord-bot && tar -x -C ~/eg-discord-bot'
    ```
 
-2. In that folder, create a `.env` file containing `DISCORD_TOKEN=<the bot token>`,
-   `ITAD_API_KEY=<IsThereAnyDeal API key>`, `ANTHROPIC_API_KEY=<Claude API key>` and
-   `TAVILY_API_KEY=<Tavily API key>`, and `chmod 600` it: files in the shared folder are readable by every
-   NAS account by default.
-3. In UGOS: **Docker → Project → Create**. Name it `eg-discord-bot`, set the storage path to
-   `docker/eg-discord-bot`, paste `docker-compose.yml` into **Compose configuration**, and deploy. UGOS saves
-   the configuration as `docker-compose.yaml` in that folder.
-4. Check the project's **Logs** tab for `Registered … command(s)`.
+2. In that folder, create a `.env` with the same settings as for local development (see `.env.example`),
+   but with the token and keys themselves rather than `*_FILE` paths, since the container can't see files
+   on the host. `chmod 600` it.
+3. Run `docker compose up -d --build`, then check `docker compose logs -f` for `Registered … command(s)`.
 
-To update: copy the new source over (step 1), then in UGOS open the project's **Compose configuration** tab
-and click **Redeploy**. `pull_policy: build` makes that rebuild the image from the new source.
+To update, copy the new source over and run `docker compose up -d --build` again.
 
-Files from the shared folder reach the image as mode 0770, so the Dockerfile makes them readable for the
+### On a UGREEN NAS (UGOS)
+
+- Copy the source into a folder in the NAS's `docker` shared folder (e.g. `/volume1/docker/eg-discord-bot`)
+  and create the `.env` there. `chmod 600` matters here: shared-folder files are readable by every NAS
+  account by default.
+- In UGOS: **Docker → Project → Create**, set the storage path to that folder, paste `docker-compose.yml`
+  into **Compose configuration**, and deploy. UGOS saves it as `docker-compose.yaml` in the folder.
+- To update: copy the new source over, then open the project's **Compose configuration** tab and click
+  **Redeploy** (leave "Pull the latest image" unchecked; `pull_policy: build` rebuilds from the source).
+
+Files from a shared folder reach the image as mode 0770, so the Dockerfile makes them readable for the
 unprivileged `node` user (without it the bot fails with "Cannot read package config … permission denied").
+
+## License
+
+MIT (see [LICENSE](LICENSE)), except the PCGamingWiki excerpt in `src/features/gameSuggestions/pcgamingwiki.test.ts`,
+which stays under PCGamingWiki's [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) license.

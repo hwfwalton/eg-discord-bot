@@ -1,9 +1,9 @@
-# Production deployment on the NAS.
-# Put a `.env` file next to this one containing:
+# Production deployment. Put a `.env` file next to this one (see .env.example for what each
+# setting does) containing at least:
 #   DISCORD_TOKEN=<the bot token>
-#   ITAD_API_KEY=<IsThereAnyDeal API key>   (optional: game replies skip deal info without it)
-#   ANTHROPIC_API_KEY=<Claude API key>       (optional: reads announcements, researches players and mods)
-#   TAVILY_API_KEY=<Tavily API key>          (optional: web search for that research)
+#   GUILD_IDS=<your server's ID>
+# plus the channel IDs and API keys for the features you want. A feature whose settings are left
+# out stays off.
 services:
   bot:
     build: .
@@ -16,15 +16,17 @@ services:
     init: true
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:?Set DISCORD_TOKEN in a .env file next to docker-compose.yml}
-      GUILD_IDS: "123456789012345678"
-      # Game night reminder: Saturdays 10:30 Pacific (see .env.example for all options)
-      GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID: "456789012345678901" # #🔔announcements
-      GAME_NIGHT_CHANNEL_ID: "567890123456789012" # #gaming: where the @everyone start post goes
-      GAME_NIGHT_SCHEDULE: "30 10 * * 6"
-      GAME_NIGHT_TIMEZONE: America/Los_Angeles
+      GUILD_IDS: ${GUILD_IDS:?Set GUILD_IDS in a .env file next to docker-compose.yml}
+      # Game night reminder (set both channel IDs, or neither; schedule and timezone have defaults)
+      GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID: ${GAME_NIGHT_ANNOUNCEMENTS_CHANNEL_ID:-}
+      GAME_NIGHT_CHANNEL_ID: ${GAME_NIGHT_CHANNEL_ID:-}
+      GAME_NIGHT_SCHEDULE: ${GAME_NIGHT_SCHEDULE:-}
+      GAME_NIGHT_TIMEZONE: ${GAME_NIGHT_TIMEZONE:-}
+      # Claude: reads unusual announcements, researches players and mods
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # Game info replies in the suggestions forum
-      GAME_SUGGESTIONS_CHANNEL_ID: "678901234567890123" # #🤩-new-game-ideas
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-}
+      # Game info in the game ideas forum
+      GAME_SUGGESTIONS_CHANNEL_ID: ${GAME_SUGGESTIONS_CHANNEL_ID:-}
       ITAD_API_KEY: ${ITAD_API_KEY:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
     logging:

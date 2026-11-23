@@ -1,6 +1,8 @@
 {
   "name": "eg-discord-bot",
   "version": "0.1.0",
+  "description": "A small helper bot for a community Discord server: game night reminders and game suggestion info",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "engines": {

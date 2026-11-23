@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { multiplayerFields, pcgwMultiplayer, wikiToText } from './pcgamingwiki.ts';
 
-// Trimmed from the real ROUNDS page.
+// Trimmed from PCGamingWiki's ROUNDS page (https://www.pcgamingwiki.com/wiki/ROUNDS), by its
+// contributors. PCGamingWiki content is licensed CC BY-NC-SA 3.0
+// (https://creativecommons.org/licenses/by-nc-sa/3.0/), so this excerpt is too, not MIT.
 const ROUNDS = `{{Infobox game}}
 ==Network==
 {{Network/Multiplayer
