@@ -6,11 +6,12 @@
 # out stays off.
 services:
   bot:
-    build: .
-    # Always build from this folder's source (never look for the image on Docker Hub), so
-    # redeploying after copying new source picks it up.
-    pull_policy: build
-    image: eg-discord-bot:latest
+    # Built and published by GitHub Actions (.github/workflows/ci.yml) after the tests pass on master.
+    # `always` makes every `docker compose up` (or a UGOS Redeploy) fetch the newest image. To roll back,
+    # use an older commit's tag instead of `latest`, e.g. ghcr.io/hwfwalton/eg-discord-bot:sha-1234567.
+    # To run your own build instead, replace these two lines with `build: .`.
+    image: ghcr.io/hwfwalton/eg-discord-bot:latest
+    pull_policy: always
     container_name: eg-discord-bot
     restart: unless-stopped
     init: true

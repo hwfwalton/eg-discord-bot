@@ -140,33 +140,37 @@ announcements unread until there are credits again. For a small server it uses w
 
 ## Deploying with Docker Compose
 
-The bot runs anywhere Docker Compose does, and builds its image from the source on that machine.
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs the type-check and tests on every push and pull
+request. When they pass on `master`, it builds the image and publishes it as
+`ghcr.io/hwfwalton/eg-discord-bot`, tagged `latest` and `sha-<commit>` (x86-64 only). So the machine
+running the bot needs only `docker-compose.yml` and a `.env`, not the source:
 
-1. Copy the committed source to the machine, for example over SSH:
+1. Put [`docker-compose.yml`](docker-compose.yml) in a folder on that machine.
+2. Next to it, create a `.env` with the same settings as for local development (see `.env.example`), but
+   with the token and keys themselves rather than `*_FILE` paths, since the container can't see files on
+   the host. `chmod 600` it.
+3. Run `docker compose up -d`, then check `docker compose logs -f` for `Registered … command(s)`.
 
-   ```bash
-   git archive HEAD | ssh <user>@<host> 'mkdir -p ~/eg-discord-bot && tar -x -C ~/eg-discord-bot'
-   ```
+To update, push to `master`, wait for the CI run to finish, and run `docker compose up -d` again: the
+compose file's `pull_policy: always` fetches the newest image. To roll back, change `latest` to an older
+commit's `sha-…` tag (listed on the package's GitHub page).
 
-2. In that folder, create a `.env` with the same settings as for local development (see `.env.example`),
-   but with the token and keys themselves rather than `*_FILE` paths, since the container can't see files
-   on the host. `chmod 600` it.
-3. Run `docker compose up -d --build`, then check `docker compose logs -f` for `Registered … command(s)`.
-
-To update, copy the new source over and run `docker compose up -d --build` again.
+In a fork, Actions publishes `ghcr.io/<you>/<repo>` instead: point `image:` at it, and make the package
+public in its settings (GitHub makes new packages private), or log the host in to ghcr.io. To build
+on the host from source instead, replace `image:` and `pull_policy:` with `build: .`.
 
 ### On a UGREEN NAS (UGOS)
 
-- Copy the source into a folder in the NAS's `docker` shared folder (e.g. `/volume1/docker/eg-discord-bot`)
-  and create the `.env` there. `chmod 600` matters here: shared-folder files are readable by every NAS
-  account by default.
+- Make a folder in the NAS's `docker` shared folder (e.g. `/volume1/docker/eg-discord-bot`) and create the
+  `.env` there. `chmod 600` matters here: shared-folder files are readable by every NAS account by default.
 - In UGOS: **Docker → Project → Create**, set the storage path to that folder, paste `docker-compose.yml`
   into **Compose configuration**, and deploy. UGOS saves it as `docker-compose.yaml` in the folder.
-- To update: copy the new source over, then open the project's **Compose configuration** tab and click
-  **Redeploy** (leave "Pull the latest image" unchecked; `pull_policy: build` rebuilds from the source).
+- To update: once the CI run has finished, open the project's **Compose configuration** tab and click
+  **Redeploy**. It pulls the newest image either way, so the "Pull the latest image" box doesn't matter.
 
-Files from a shared folder reach the image as mode 0770, so the Dockerfile makes them readable for the
-unprivileged `node` user (without it the bot fails with "Cannot read package config … permission denied").
+If you build from source on the NAS instead, note that files from a shared folder reach the image as mode
+0770; the Dockerfile makes them readable for the unprivileged `node` user (without that, the bot fails with
+"Cannot read package config … permission denied").
 
 ## License
 

@@ -53,5 +53,8 @@ lookups, auto-creating threads). Deployed with Docker Compose (see the README). 
   `src/scripts/invite-url.ts` only when a feature needs them. Message Content (privileged) is enabled in
   the Developer Portal and used by game night and "@EGBot"; avoid adding other privileged intents.
 - Vitest for tests, colocated as `*.test.ts`. Run `npm run check` before calling work done.
+- CI (`.github/workflows/ci.yml`) runs `npm run check` on pushes and pull requests, and on `master` publishes
+  the image to `ghcr.io/hwfwalton/eg-discord-bot` (`latest` and `sha-<commit>`), which the deployment
+  pulls. Actions are pinned to commit SHAs with the version in a comment.
 - Config comes only from env (`src/config.ts`). Never commit tokens, keys or real server/channel IDs: they
   go in the gitignored `.env` (secrets can also be files it points at with `*_FILE`).
