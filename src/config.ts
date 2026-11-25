@@ -33,6 +33,24 @@ export interface GameSuggestionsConfig {
   tavilyApiKey?: string;
 }
 
+export interface HistoryConfig {
+  /** Port the session history page is served on. */
+  port: number;
+  /** Interface to listen on. Only this machine can reach the default, 127.0.0.1. */
+  host: string;
+  /** Folder holding the record: sessions.csv and games.csv. */
+  dir: string;
+  /** The page's heading, e.g. the community's name. */
+  title: string;
+  /** IANA timezone that decides what "today" is on the page (GAME_NIGHT_TIMEZONE). */
+  timezone: string;
+  /** Extra names the page may be opened under (HISTORY_ALLOWED_HOSTS); IP addresses and localhost always work. */
+  allowedHosts: string[];
+}
+
+export const DEFAULT_HISTORY_DIR = 'data/history';
+export const DEFAULT_HISTORY_TITLE = 'Game night history';
+
 export interface Config {
   token: string;
   /** Servers this instance registers commands in and responds to. */
@@ -41,6 +59,8 @@ export interface Config {
   gameNight?: GameNightConfig;
   /** Game info replies in the suggestions forum; disabled when its channel isn't set. */
   gameSuggestions?: GameSuggestionsConfig;
+  /** Web page with the record of past sessions; disabled when its port isn't set. */
+  history?: HistoryConfig;
 }
 
 type Env = Record<string, string | undefined>;
@@ -60,6 +80,7 @@ export function loadConfig(env: Env = process.env, readFile: ReadFile = defaultR
     guildIds: parseGuildIds(env.GUILD_IDS),
     gameNight: parseGameNight(env, claude),
     gameSuggestions: parseGameSuggestions(env, readFile, claude),
+    history: parseHistory(env),
   };
 }
 
@@ -117,12 +138,7 @@ function parseGameNight(env: Env, claude: ClaudeConfig | undefined): GameNightCo
   }
 
   const schedule = env.GAME_NIGHT_SCHEDULE?.trim() || '30 10 * * 6';
-  const timezone = env.GAME_NIGHT_TIMEZONE?.trim() || 'America/Los_Angeles';
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
-  } catch {
-    throw new Error(`GAME_NIGHT_TIMEZONE "${timezone}" isn't a valid timezone (e.g. America/Los_Angeles).`);
-  }
+  const timezone = parseTimezone(env);
   try {
     new Cron(schedule, { timezone, paused: true });
   } catch (err) {
@@ -138,6 +154,38 @@ function parseGameSuggestions(env: Env, readFile: ReadFile, claude: ClaudeConfig
   const itadApiKey = readSecret(env, 'ITAD_API_KEY', readFile);
   const tavilyApiKey = readSecret(env, 'TAVILY_API_KEY', readFile);
   return { forumChannelId, ...(itadApiKey && { itadApiKey }), ...(claude && { claude }), ...(tavilyApiKey && { tavilyApiKey }) };
+}
+
+/** The community's timezone: game night's schedule is in it, and so are the history page's dates. */
+function parseTimezone(env: Env): string {
+  const timezone = env.GAME_NIGHT_TIMEZONE?.trim() || 'America/Los_Angeles';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+  } catch {
+    throw new Error(`GAME_NIGHT_TIMEZONE "${timezone}" isn't a valid timezone (e.g. America/Los_Angeles).`);
+  }
+  return timezone;
+}
+
+/** The session history page; undefined (off) unless HISTORY_PORT is set. */
+export function parseHistory(env: Env): HistoryConfig | undefined {
+  const rawPort = env.HISTORY_PORT?.trim();
+  if (!rawPort) return undefined;
+  const port = Number(rawPort);
+  if (!/^\d+$/.test(rawPort) || port < 1 || port > 65535) {
+    throw new Error(`HISTORY_PORT "${rawPort}" isn't a port number (1-65535).`);
+  }
+  return {
+    port,
+    host: env.HISTORY_HOST?.trim() || '127.0.0.1',
+    dir: env.HISTORY_DIR?.trim() || DEFAULT_HISTORY_DIR,
+    title: env.HISTORY_TITLE?.trim() || DEFAULT_HISTORY_TITLE,
+    timezone: parseTimezone(env),
+    allowedHosts: (env.HISTORY_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+  };
 }
 
 function optionalId(env: Env, name: string): string | undefined {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applicationIdFromToken, loadConfig } from './config.ts';
+import { applicationIdFromToken, loadConfig, parseHistory } from './config.ts';
 
 const GUILD = '123456789012345678';
 const noFile = () => {
@@ -77,6 +77,42 @@ describe('loadConfig', () => {
     expect(loadConfig(env, () => 'itad-key\n').gameSuggestions).toEqual({ forumChannelId: GUILD, itadApiKey: 'itad-key' });
     const withoutKey = { DISCORD_TOKEN: 't', GUILD_IDS: GUILD, GAME_SUGGESTIONS_CHANNEL_ID: GUILD };
     expect(loadConfig(withoutKey, noFile).gameSuggestions).toEqual({ forumChannelId: GUILD });
+  });
+});
+
+describe('parseHistory', () => {
+  it('is off unless HISTORY_PORT is set', () => {
+    expect(parseHistory({})).toBeUndefined();
+    expect(parseHistory({ HISTORY_PORT: ' ', HISTORY_DIR: '/data' })).toBeUndefined();
+    expect(loadConfig({ DISCORD_TOKEN: 't', GUILD_IDS: GUILD }, noFile).history).toBeUndefined();
+  });
+
+  it('defaults to this machine only, the data/history folder and a generic title', () => {
+    expect(parseHistory({ HISTORY_PORT: '8480' })).toEqual({
+      port: 8480,
+      host: '127.0.0.1',
+      dir: 'data/history',
+      title: 'Game night history',
+      timezone: 'America/Los_Angeles',
+      allowedHosts: [],
+    });
+  });
+
+  it('reads the host, folder and title', () => {
+    const env = { HISTORY_PORT: ' 9000 ', HISTORY_HOST: '0.0.0.0', HISTORY_DIR: ' /srv/history ', HISTORY_TITLE: ' Board Game Club ' };
+    expect(parseHistory(env)).toMatchObject({ port: 9000, host: '0.0.0.0', dir: '/srv/history', title: 'Board Game Club' });
+  });
+
+  it('uses game night\'s timezone, and rejects one that doesn\'t exist', () => {
+    expect(parseHistory({ HISTORY_PORT: '8480', GAME_NIGHT_TIMEZONE: 'Europe/Berlin' })?.timezone).toBe('Europe/Berlin');
+    expect(() => parseHistory({ HISTORY_PORT: '8480', GAME_NIGHT_TIMEZONE: 'Mars/Olympus' })).toThrow(/GAME_NIGHT_TIMEZONE/);
+    expect(parseHistory({ HISTORY_PORT: '8480', HISTORY_ALLOWED_HOSTS: ' NAS.local, games.example.org ,' })?.allowedHosts).toEqual(['nas.local', 'games.example.org']);
+  });
+
+  it('rejects a HISTORY_PORT that isn\'t a port number', () => {
+    for (const bad of ['0', '65536', '80a', '-1', '8080.5', 'http']) {
+      expect(() => parseHistory({ HISTORY_PORT: bad }), bad).toThrow(/HISTORY_PORT/);
+    }
   });
 });
 

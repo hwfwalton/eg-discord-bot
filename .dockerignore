@@ -4,6 +4,7 @@ node_modules
 .env.*
 secrets
 data
+history
 **/*.test.ts
 Dockerfile
 docker-compose.yml

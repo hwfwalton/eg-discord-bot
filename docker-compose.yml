@@ -30,6 +30,21 @@ services:
       GAME_SUGGESTIONS_CHANNEL_ID: ${GAME_SUGGESTIONS_CHANNEL_ID:-}
       ITAD_API_KEY: ${ITAD_API_KEY:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      # Session history page: on when HISTORY_PORT is set in .env (see README → Session history page)
+      HISTORY_PORT: ${HISTORY_PORT:-}
+      HISTORY_TITLE: ${HISTORY_TITLE:-}
+      HISTORY_ALLOWED_HOSTS: ${HISTORY_ALLOWED_HOSTS:-}
+      # In a container the page has to listen on every interface (so HISTORY_HOST in .env is not used
+      # here); the `ports` line below decides who can reach it.
+      HISTORY_HOST: 0.0.0.0
+    # For the session history page, uncomment these lines (and set HISTORY_PORT in .env). The port is
+    # then open to everything that can reach this machine; put 127.0.0.1: in front to keep it local.
+    # The folder holds the record (sessions.csv, games.csv); the bot adds each new week to it, so the
+    # folder and the files in it must be writable by user 1000 (the image's "node" user).
+    # ports:
+    #   - "${HISTORY_PORT}:${HISTORY_PORT}"
+    # volumes:
+    #   - ./history:/app/data/history
     logging:
       driver: json-file
       options:

@@ -11,12 +11,13 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/index.ts",
     "start": "node src/index.ts",
-    "typecheck": "tsc",
+    "typecheck": "tsc && tsc -p src/features/history/client",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm test",
     "invite": "node --env-file-if-exists=.env src/scripts/invite-url.ts",
-    "lookup": "node --env-file-if-exists=.env src/scripts/lookup-game.ts"
+    "lookup": "node --env-file-if-exists=.env src/scripts/lookup-game.ts",
+    "history": "HISTORY_RELOAD=1 node --env-file-if-exists=.env src/scripts/history-page.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

@@ -17,6 +17,8 @@ CLAUDE.local.md
 .claude/settings.local.json
 
 data/
+# The session record next to docker-compose.yml (its ./history volume). Not src/features/history.
+/history/
 coverage/
 *.log
 .DS_Store

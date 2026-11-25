@@ -6,7 +6,8 @@ group's conventions (described below), but every feature is optional and configu
 
 ## How it works
 
-- The bot opens an **outbound** WebSocket connection to Discord. No ports need to be opened on the host.
+- The bot opens an **outbound** WebSocket connection to Discord. No ports need to be opened on the host,
+  unless you turn on the optional [session history page](#session-history-page).
 - Features are **slash commands** (`/ping`, …) registered per server on startup, so changes appear right away.
 - Node 24 runs the `.ts` files directly, so there's no build step. `tsc` only type-checks.
 
@@ -81,6 +82,53 @@ reply. If a post for the game already exists, open or archived, the bot links to
 includes posts whose names differ only in capitalization, punctuation, spacing or "II" vs "2", and
 Steam's best guess for an inexact name ("deep rock" → "Did you mean Deep Rock Galactic?").
 
+### Session history page
+
+An optional web page with the record of past sessions: the most played games, favourites that are due a
+return, styles of game by year, every week at a glance, and searchable tables of every session and game.
+The bot serves it itself (TypeScript all the way to the page's own script, with no build step: the server
+strips the types). Set `HISTORY_PORT` to turn it on, then open `http://localhost:8480/`.
+
+**The record** is two CSV files in `HISTORY_DIR` (default `data/history`, which git ignores). Edit them in
+any spreadsheet app; the page picks up changes within half a minute.
+
+- `sessions.csv`, one row per week:
+
+  | Column | Meaning |
+  | --- | --- |
+  | `Session` | Its name, e.g. `EG289`. Empty for weeks off. |
+  | `Date` | `YYYY-MM-DD` (dates a spreadsheet rewrote as `M/D/YYYY` are read too). The only required column. |
+  | `Start` | Start time, as text. |
+  | `Status` | `Played`, `Cancelled`, `No session` or `Special` (listed, but not counted). Empty means played. |
+  | `Games` | What was played. Separate several games with `;`. |
+  | `Planned` | What was announced, if something else was played. |
+  | `Cost`, `Announced by`, `Source`, `Notes` | Free text. A cost starting with "Free", "Host" (gave out keys) or a price feeds the cost chart. |
+
+- `games.csv` (optional), one row per game: `Game`, `Style` (your own genre label, e.g. "Social
+  deduction"), `Mode` (Competitive, Co-op, …), `Where`, `Link`, `Tags` (comma-separated), `Developer`. A
+  game without a row is shown as "Uncategorized".
+
+Columns can be in any order and extra columns are ignored. Rows the page can't read (a bad date, say) are
+skipped and listed at the bottom of the page, with their line numbers.
+
+**New weeks add themselves.** With game night on, once a session has started the bot works out what
+happened from that week's announcements (the weekly template or a "no official EG" post; never Claude) and
+appends a row to `sessions.csv`, marked `Announcement (auto)` in `Source`. A game it hasn't seen is added
+to `games.csv` without a style, and the page lists the games that still need one. The bot only ever adds
+rows at the end: to correct a row, edit the file. If the folder isn't writable, the page still shows the
+new weeks and says they couldn't be saved.
+
+**Who can see it:** anyone who can reach the port. There is no login, and the page shows the `Notes`
+column, so keep it on your own network unless everything in the record is fine to publish. By default it
+listens on this machine only (`HISTORY_HOST`). It answers under an IP address or `localhost`; to open it
+under a name (`nas.local`, a domain behind a reverse proxy), list the name in `HISTORY_ALLOWED_HOSTS`.
+
+Dates on the page ("today", "16 months ago") use `GAME_NIGHT_TIMEZONE`, also when game night is off.
+
+`npm run history` serves the page from the files alone, without connecting to Discord: handy for checking
+edits. The page offers the record as downloads with the worked-out columns added (times played, style,
+days since last played).
+
 ## Setting up the Discord application
 
 1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application,
@@ -106,6 +154,7 @@ cp .env.example .env     # then set DISCORD_TOKEN_FILE (or DISCORD_TOKEN) and GU
 npm run dev              # runs the bot, restarts on file changes
 npm run check            # type-check + tests
 npm run invite           # prints the link for adding the bot to each server in GUILD_IDS
+npm run history          # serves the session history page from data/history, without Discord
 ```
 
 | Variable             | Meaning                                                  |
@@ -120,6 +169,9 @@ npm run invite           # prints the link for adding the bot to each server in 
 | `TAVILY_API_KEY` / `TAVILY_API_KEY_FILE` | Tavily key (free plan) for web search in the players/mods research (optional) |
 | `GAME_SUGGESTIONS_CHANNEL_ID` | Enable game info replies in this forum channel |
 | `ITAD_API_KEY` / `ITAD_API_KEY_FILE` | IsThereAnyDeal API key for deal info (optional). The OAuth client ID/secret aren't needed. |
+| `HISTORY_PORT` | Enable the session history page on this port (e.g. `8480`) |
+| `HISTORY_DIR`, `HISTORY_TITLE`, `HISTORY_HOST` | Folder with the record (default `data/history`), the page's heading, and the interface to listen on (default `127.0.0.1`: this machine only) |
+| `HISTORY_ALLOWED_HOSTS` | Comma-separated host names the page may be opened under, besides IP addresses and `localhost` |
 
 To get a server's or channel's ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click
 it → **Copy Server ID** / **Copy Channel ID**.
@@ -150,6 +202,15 @@ running the bot needs only `docker-compose.yml` and a `.env`, not the source:
    with the token and keys themselves rather than `*_FILE` paths, since the container can't see files on
    the host. `chmod 600` it.
 3. Run `docker compose up -d`, then check `docker compose logs -f` for `Registered … command(s)`.
+
+For the [session history page](#session-history-page), also set `HISTORY_PORT` in the `.env`, uncomment the
+`ports` and `volumes` lines in the compose file, and put `sessions.csv` and `games.csv` in a `history`
+folder next to it (it is mounted into the container). Create that folder yourself and make it and its
+files writable by user 1000, the image's `node` user (`sudo chown -R 1000 history`): if Docker creates
+the folder, it belongs to root and the bot can't save new weeks. The page is then at
+`http://<host>:<HISTORY_PORT>/` for everything that can reach the host; to keep it to the host itself,
+write the port as `"127.0.0.1:${HISTORY_PORT}:${HISTORY_PORT}"` (`HISTORY_HOST` is not used under Compose).
+The page shares the bot's process, so it is only up while the bot is logged in to Discord.
 
 To update, push to `master`, wait for the CI run to finish, and run `docker compose up -d` again: the
 compose file's `pull_policy: always` fetches the newest image. To roll back, change `latest` to an older
