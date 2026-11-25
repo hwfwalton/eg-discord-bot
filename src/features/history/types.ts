@@ -1,6 +1,5 @@
-// Shared types for the session history page: the record on disk (two CSV files) and the JSON the
-// page renders. Everything the page shows is computed on the server (stats.ts), so the page's own
-// script only draws.
+// Shared types for the session record: the two CSV files (record.ts) and next.json, which the bot
+// writes and the history site (a separate repo) reads.
 
 /** What happened in one scheduled week. */
 export type SessionStatus = 'Played' | 'Cancelled' | 'No session' | 'Special';
@@ -55,155 +54,10 @@ export interface GameInfo {
   developer?: string;
 }
 
-export const UNCATEGORIZED = 'Uncategorized';
-
-/** A problem found while reading a file, shown at the bottom of the page. */
+/** A problem found while reading a file. */
 export interface DataNote {
   kind: 'warning' | 'info';
   text: string;
-}
-
-export type CostKind = 'free' | 'keys' | 'paid' | 'unknown';
-
-/** Display order of the cost kinds. */
-export const COST_KINDS: readonly CostKind[] = ['free', 'keys', 'paid', 'unknown'];
-
-// ---------------------------------------------------------------------------------------------
-// What the page gets: GET /api/history.json
-// ---------------------------------------------------------------------------------------------
-
-export interface HistoryData {
-  /** Page heading, e.g. the community's name. */
-  title: string;
-  /** When this was computed (ISO 8601). */
-  generatedAt: string;
-  /** "Today" in the schedule's timezone (YYYY-MM-DD); `daysSince` counts from it. */
-  today: string;
-  /** Short name of the timezone start times are in, e.g. "PT". Missing if unknown. */
-  timezone?: string;
-  /** Every row of the record, oldest first. */
-  sessions: SessionView[];
-  /** Every game that was played at least once, most played first (ties: most recently played first). */
-  games: GameView[];
-  /** Totals for each time range the page can filter to: "all", then "recent" (last 12 months), then each year, newest first. */
-  slices: Slice[];
-  /** One entry per calendar year in the record, oldest first. */
-  years: YearSummary[];
-  /** Every style, most sessions first (the row order of the style-by-year grid). */
-  styles: string[];
-  /** Games played 3+ times whose last session was more than a year before `today`, most played first. */
-  overdue: OverdueGame[];
-  /** The first session and each numbered session divisible by 50 (EG50, EG100, …), oldest first. */
-  milestones: Milestone[];
-  /** The upcoming session, when the bot knows the schedule. */
-  next?: NextSession;
-  /** Problems reading the files, games with no style, and whether newer sessions could be checked. */
-  notes: DataNote[];
-}
-
-export interface SessionView {
-  session?: string;
-  date: string;
-  /** "Saturday" */
-  day: string;
-  start?: string;
-  status: SessionStatus;
-  /**
-   * The row's games, each with how many times it had been played up to and including this session.
-   * `play` is 0 on rows that aren't Played (a Special session's games count towards nothing).
-   */
-  games: { name: string; play: number }[];
-  planned: string[];
-  cost?: string;
-  /** Only for Played rows that name a game. */
-  costKind?: CostKind;
-  announcedBy?: string;
-  source?: string;
-  notes?: string;
-  /** Distinct styles of the games played, in game order. */
-  styles: string[];
-  /** True for rows the bot added from an announcement (see AUTO_SOURCE). */
-  auto: boolean;
-}
-
-export interface GameView {
-  name: string;
-  /** Number of Played sessions that include the game. */
-  plays: number;
-  /** Date of each of those sessions, oldest first. */
-  dates: string[];
-  /** Name of the first and last of those sessions, when they have one. */
-  firstSession?: string;
-  lastSession?: string;
-  /** Whole days from the last play to `today`. */
-  daysSince: number;
-  /** Most sessions in a row (counting Played sessions only; off weeks don't break a run). */
-  longestRun: number;
-  style: string;
-  mode?: string;
-  where?: string;
-  /** Only ever an http(s) address. */
-  link?: string;
-  tags: string[];
-  developer?: string;
-}
-
-export interface Slice {
-  /** "all", "recent" or a year like "2024". */
-  key: string;
-  /** "All time", "Last 12 months" or "2024". */
-  label: string;
-  /** First and last date the range covers (YYYY-MM-DD), clipped to the record. */
-  from: string;
-  to: string;
-  /** Played sessions. */
-  played: number;
-  /** Cancelled and "No session" weeks. */
-  off: number;
-  special: number;
-  /** Different games played in the range. */
-  distinctGames: number;
-  /** Of those, games whose first-ever session is in the range. */
-  newGames: number;
-  /** Games played exactly once in the range. */
-  onePlayGames: number;
-  /** The 15 most played games in the range (ties: most recently played first). */
-  topGames: { name: string; plays: number }[];
-  /** Sessions per style (a session with games of two styles counts for both), most sessions first. */
-  styles: { style: string; sessions: number; games: number }[];
-  /** Sessions per mode, most sessions first. A session with games of two modes counts for both. */
-  modes: { mode: string; sessions: number }[];
-  /** Played sessions that name a game, by cost kind, in COST_KINDS order (zero counts included). */
-  costs: { kind: CostKind; sessions: number }[];
-  /** The longest run of consecutive Played sessions of one game, when any game ran 2+ times. */
-  longestRun?: { name: string; length: number; from: string; to: string };
-}
-
-export interface YearSummary {
-  year: string;
-  /** Played sessions in which at least one game was new to the record. */
-  newGameSessions: number;
-  /** Played sessions of games all seen before. */
-  returningSessions: number;
-  /** Played sessions with no game recorded. */
-  unknownSessions: number;
-  /** Cancelled and "No session" weeks. */
-  off: number;
-  /** Sessions per style that year. */
-  styles: Record<string, number>;
-}
-
-export interface OverdueGame {
-  name: string;
-  plays: number;
-  last: string;
-  daysSince: number;
-}
-
-export interface Milestone {
-  session: string;
-  date: string;
-  games: string[];
 }
 
 export interface NextSession {
@@ -213,4 +67,9 @@ export interface NextSession {
   status: 'announced' | 'cancelled' | 'unannounced';
   session?: string;
   games: string[];
+}
+
+/** What next.json holds: the upcoming session, and when the bot worked it out (ISO 8601). */
+export interface NextFile extends NextSession {
+  updatedAt: string;
 }

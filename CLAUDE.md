@@ -46,17 +46,17 @@ lookups, auto-creating threads). Deployed with Docker Compose (see the README). 
   `requireExactMatch` so chat that starts with a mention never creates a post; `/suggest` doesn't.
 - Anything triggered by a message (not an interaction) must check it's in this instance's own server:
   two instances (e.g. dev and prod) can share one bot account, and then each sees the other server's messages.
-- Session history page (`src/features/history/`, on when `HISTORY_PORT` is set): a web page served by the bot
-  itself with `node:http`. The record is two hand-editable CSV files in `HISTORY_DIR` (`record.ts`); all
-  numbers are computed on the server (`stats.ts`, typed by `types.ts`) and the page only draws. New weeks
-  are derived from the announcements with the template parser only (`live.ts`, never Claude: the record
-  must be free and repeatable) and appended to `sessions.csv` (`store.ts`): only ever add rows at the end,
-  never rewrite the owner's file. The page's script (`client/`) is browser TypeScript with its own
-  `tsconfig.json` (DOM types); `server.ts` strips the types with `node:module` and serves each file
-  under its `.ts` name, so: erasable syntax only, `.ts` import extensions, and only `import type` from
-  outside `client/`. A strict CSP is sent (no inline scripts or styles), and everything from the record
-  or Discord goes into the page as text (`textContent`), never as HTML. The record holds the community's
-  own data: it lives in the gitignored `data/` (or `/history/` next to the compose file), never in git.
+- Session record (`src/features/history/`, on when `HISTORY_DIR` is set and game night is on): the bot
+  only writes the record; the web page is a separate repo, `eg-history`
+  (https://github.com/hwfwalton/eg-history), that reads the same folder read-only. The record is two
+  hand-editable CSV files (`record.ts`, kept identical in both repos: change it in both) plus `next.json`
+  (the upcoming session, written atomically). New weeks are derived from the announcements with the
+  template parser only (`live.ts`, never Claude: the record must be free and repeatable) and appended by
+  `recorder.ts`: only ever add rows at the end, never rewrite the owner's file, one run at a time, and
+  nothing while the file has rows it can't read. `history.ts` runs it on startup, on announcement changes
+  (debounced) and hourly when `isDue` says a run could change anything. The record holds the
+  community's own data: it lives in the gitignored `data/` (or `/history/` next to the compose file),
+  never in git.
 - Shared name helpers live in `src/gameName.ts`: `cleanGameName` (strip Discord markup; quotes and
   brackets only in matching pairs, since game night uses it too), `displayGameName`, and the comparison
   keys `normalizeGameName` (word-level) and `gameKey` (also ignores spacing; "" for non-Latin names).

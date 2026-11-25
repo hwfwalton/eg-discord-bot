@@ -19,8 +19,5 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src"],
-  // The history page's own script runs in the browser, so it is checked with the DOM types instead
-  // (its own tsconfig.json; `npm run typecheck` runs both).
-  "exclude": ["src/features/history/client"]
+  "include": ["src"]
 }

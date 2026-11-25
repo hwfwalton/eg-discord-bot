@@ -1,91 +1,83 @@
-// Discord wiring for the session history page: serves the page (server.ts) and gives the record
-// (store.ts) the announcements channel as its source of newer sessions.
-import { createServer, type Server } from 'node:http';
-import { join } from 'node:path';
+// Discord wiring for the session record: gives the recorder (recorder.ts) the announcements channel
+// as its source of newer sessions, and decides when it runs. The history site (a separate repo)
+// reads the same folder; the bot serves no page.
 import { Events, type Client, type Message, type PartialMessage } from 'discord.js';
 import type { GameNightConfig, HistoryConfig } from '../../config.ts';
 import { log } from '../../log.ts';
 import { createSchedule } from '../gameNight/plan.ts';
 import type { AnnouncementPost } from './live.ts';
-import { formatCsv } from './record.ts';
-import { createHistoryHandler } from './server.ts';
-import { gamesExport, sessionsExport } from './stats.ts';
-import { GAMES_FILE, SESSIONS_FILE, createHistoryStore, type HistoryStore, type LiveSource } from './store.ts';
+import { createRecorder, type LiveSource } from './recorder.ts';
 
-/** The page itself: index.html, styles.css and its TypeScript modules. */
-const CLIENT_DIR = join(import.meta.dirname, 'client');
-/** The announcements are re-read at most this often (and whenever one is posted, edited or deleted). */
+/** Fetched announcements are reused for this long (unless one is posted, edited or deleted). */
 const POSTS_MAX_AGE_MS = 5 * 60_000;
 /** 100 posts a page: far more than the weeks since the record's last row should ever need. */
 const MAX_POST_PAGES = 5;
-
-export interface History {
-  close(): void;
-}
+/** How often the bot checks whether a run is due. Most checks only look at the folder, not Discord. */
+const CHECK_EVERY_MS = 3600_000;
+/** An announcement edited a few times in a row gives one run. */
+const DEBOUNCE_MS = 5_000;
 
 /**
- * Starts the history page. With game night configured, the weeks since the record's last row come
- * from the announcements channel; without it the page shows the files as they are.
+ * Keeps the record in config.dir up to date from the announcements channel game night reads. The
+ * timers are unref'd and do nothing once the client is destroyed, so shutdown needs no extra step.
  */
-export function registerHistory(client: Client, config: HistoryConfig, gameNight?: GameNightConfig): History | undefined {
-  const announcements = gameNight ? announcementsSource(client, gameNight) : undefined;
-  const store = createHistoryStore({
-    dir: config.dir,
-    title: config.title,
-    timezone: config.timezone,
-    ...(announcements && { live: announcements.source }),
-  });
-  if (!gameNight) log.info('History page: game night is off, so new sessions are not added to the record automatically');
+export function registerSessionRecord(client: Client, config: HistoryConfig, gameNight: GameNightConfig): void {
+  const announcements = announcementsSource(client, gameNight);
+  const recorder = createRecorder({ dir: config.dir, timezone: gameNight.timezone, live: announcements.source });
 
-  if (gameNight && announcements) {
-    // A new, edited or deleted announcement can change the latest sessions: look again on the next load.
-    const changed = (message: Message | PartialMessage) => {
-      if (message.channelId !== gameNight.announcementsChannelId) return;
-      announcements.forget();
-      store.invalidate();
-    };
-    client.on(Events.MessageCreate, changed);
-    client.on(Events.MessageUpdate, (_before, after) => changed(after));
-    client.on(Events.MessageDelete, changed);
+  let running = false;
+  /** Asked for again while a run was going: one more run follows it. */
+  let again = false;
+  async function run(): Promise<void> {
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    try {
+      do {
+        again = false;
+        await recorder.run();
+      } while (again);
+    } catch (err) {
+      log.warn('Session record: updating the record failed', err);
+    } finally {
+      running = false;
+    }
   }
 
-  try {
-    const server = startHistoryServer(config, store);
-    return { close: () => void server.close() };
-  } catch (err) {
-    // A broken page must not take the bot down with it.
-    log.error('History page: could not start', err);
-    return undefined;
-  }
-}
+  client.once(Events.ClientReady, () => {
+    log.info(`Session record: keeping ${config.dir} up to date`);
+    void run();
+  });
 
-/** Serves the page for a record. Also used on its own by `npm run history` (no Discord). */
-export function startHistoryServer(config: HistoryConfig, store: HistoryStore): Server {
-  const handler = createHistoryHandler({
-    clientDir: CLIENT_DIR,
-    getData: () => store.getData(),
-    downloads: {
-      [SESSIONS_FILE]: (data) => formatCsv(sessionsExport(data)),
-      [GAMES_FILE]: (data) => formatCsv(gamesExport(data)),
-    },
-    // While developing, pick up edits to the page without restarting.
-    reload: process.env.HISTORY_RELOAD === '1',
-    allowedHosts: config.allowedHosts,
-    log,
-  });
-  const server = createServer(handler);
-  // The page only ever answers small GET requests, so slow or stuck clients are dropped early.
-  server.requestTimeout = 15_000;
-  server.headersTimeout = 10_000;
-  server.keepAliveTimeout = 5_000;
-  server.timeout = 30_000;
-  server.maxConnections = 64;
-  server.on('error', (err) => log.error(`History page: could not listen on ${config.host}:${config.port}`, err));
-  server.listen(config.port, config.host, () => {
-    const shownHost = config.host === '0.0.0.0' || config.host === '::' ? 'localhost' : config.host;
-    log.info(`History page: http://${shownHost}:${config.port}/ (record in ${config.dir})`);
-  });
-  return server;
+  const timer = setInterval(() => {
+    if (running || !client.isReady()) return;
+    recorder.due().then(
+      (due) => {
+        if (due) void run();
+      },
+      (err: unknown) => log.warn(`Session record: could not read ${config.dir}`, err),
+    );
+  }, CHECK_EVERY_MS);
+  // Never keeps the process alive on its own.
+  timer.unref();
+
+  // A new, edited or deleted announcement can change the latest sessions and next.json.
+  let debounce: NodeJS.Timeout | undefined;
+  const changed = (message: Message | PartialMessage) => {
+    // Channel IDs are unique across servers, so this also keeps to this instance's own server.
+    if (message.channelId !== gameNight.announcementsChannelId) return;
+    announcements.forget();
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      if (client.isReady()) void run();
+    }, DEBOUNCE_MS);
+    debounce.unref();
+  };
+  client.on(Events.MessageCreate, changed);
+  client.on(Events.MessageUpdate, (_before, after) => changed(after));
+  client.on(Events.MessageDelete, changed);
 }
 
 function announcementsSource(client: Client, gameNight: GameNightConfig): { source: LiveSource; forget(): void } {

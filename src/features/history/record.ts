@@ -1,3 +1,5 @@
+// Kept identical to src/record.ts in eg-history, which reads these files for the web page.
+//
 // Reads and writes the record's two CSV files, sessions.csv and games.csv. Pure functions: the
 // caller reads and writes the files.
 //

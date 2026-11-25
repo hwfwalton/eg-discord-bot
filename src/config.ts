@@ -34,22 +34,9 @@ export interface GameSuggestionsConfig {
 }
 
 export interface HistoryConfig {
-  /** Port the session history page is served on. */
-  port: number;
-  /** Interface to listen on. Only this machine can reach the default, 127.0.0.1. */
-  host: string;
-  /** Folder holding the record: sessions.csv and games.csv. */
+  /** Folder holding the record: sessions.csv, games.csv and next.json. */
   dir: string;
-  /** The page's heading, e.g. the community's name. */
-  title: string;
-  /** IANA timezone that decides what "today" is on the page (GAME_NIGHT_TIMEZONE). */
-  timezone: string;
-  /** Extra names the page may be opened under (HISTORY_ALLOWED_HOSTS); IP addresses and localhost always work. */
-  allowedHosts: string[];
 }
-
-export const DEFAULT_HISTORY_DIR = 'data/history';
-export const DEFAULT_HISTORY_TITLE = 'Game night history';
 
 export interface Config {
   token: string;
@@ -59,7 +46,7 @@ export interface Config {
   gameNight?: GameNightConfig;
   /** Game info replies in the suggestions forum; disabled when its channel isn't set. */
   gameSuggestions?: GameSuggestionsConfig;
-  /** Web page with the record of past sessions; disabled when its port isn't set. */
+  /** Session record the bot keeps for the history site; disabled when its folder isn't set. */
   history?: HistoryConfig;
 }
 
@@ -156,7 +143,7 @@ function parseGameSuggestions(env: Env, readFile: ReadFile, claude: ClaudeConfig
   return { forumChannelId, ...(itadApiKey && { itadApiKey }), ...(claude && { claude }), ...(tavilyApiKey && { tavilyApiKey }) };
 }
 
-/** The community's timezone: game night's schedule is in it, and so are the history page's dates. */
+/** The community's timezone: game night's schedule is in it, and so are the session record's dates. */
 function parseTimezone(env: Env): string {
   const timezone = env.GAME_NIGHT_TIMEZONE?.trim() || 'America/Los_Angeles';
   try {
@@ -167,25 +154,10 @@ function parseTimezone(env: Env): string {
   return timezone;
 }
 
-/** The session history page; undefined (off) unless HISTORY_PORT is set. */
+/** The session record; undefined (off) unless HISTORY_DIR is set. It also needs game night (see bot.ts). */
 export function parseHistory(env: Env): HistoryConfig | undefined {
-  const rawPort = env.HISTORY_PORT?.trim();
-  if (!rawPort) return undefined;
-  const port = Number(rawPort);
-  if (!/^\d+$/.test(rawPort) || port < 1 || port > 65535) {
-    throw new Error(`HISTORY_PORT "${rawPort}" isn't a port number (1-65535).`);
-  }
-  return {
-    port,
-    host: env.HISTORY_HOST?.trim() || '127.0.0.1',
-    dir: env.HISTORY_DIR?.trim() || DEFAULT_HISTORY_DIR,
-    title: env.HISTORY_TITLE?.trim() || DEFAULT_HISTORY_TITLE,
-    timezone: parseTimezone(env),
-    allowedHosts: (env.HISTORY_ALLOWED_HOSTS ?? '')
-      .split(',')
-      .map((host) => host.trim().toLowerCase())
-      .filter(Boolean),
-  };
+  const dir = env.HISTORY_DIR?.trim();
+  return dir ? { dir } : undefined;
 }
 
 function optionalId(env: Env, name: string): string | undefined {

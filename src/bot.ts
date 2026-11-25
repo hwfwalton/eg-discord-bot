@@ -12,7 +12,7 @@ import type { Command } from './commands/types.ts';
 import type { Config } from './config.ts';
 import { registerGameNight } from './features/gameNight/gameNight.ts';
 import { registerGameSuggestions } from './features/gameSuggestions/gameSuggestions.ts';
-import { registerHistory } from './features/history/history.ts';
+import { registerSessionRecord } from './features/history/history.ts';
 import { log } from './log.ts';
 
 export function createBot(config: Config): Client {
@@ -29,11 +29,13 @@ export function createBot(config: Config): Client {
   const gameSuggestions = config.gameSuggestions
     ? registerGameSuggestions(client, config.gameSuggestions)
     : undefined;
-  // The history page reads the same announcements as game night to add each new week to the record.
-  const history = config.history ? registerHistory(client, config.history, config.gameNight) : undefined;
+  // The session record is worked out from the same announcements and schedule as game night.
+  const record = Boolean(config.history && config.gameNight);
+  if (config.history && config.gameNight) registerSessionRecord(client, config.history, config.gameNight);
+  else if (config.history) log.warn('Session record: HISTORY_DIR is set, but recording needs game night, which is off');
   log.info(
     `Features: game night ${gameNight ? 'on' : 'off'}, game suggestions ${gameSuggestions ? 'on' : 'off'}, ` +
-      `history page ${history ? 'on' : 'off'}`,
+      `session record ${record ? 'on' : 'off'}`,
   );
 
   const commands = buildCommands({ gameNight, gameSuggestions });
